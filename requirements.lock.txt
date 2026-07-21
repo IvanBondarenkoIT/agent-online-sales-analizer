@@ -1,0 +1,12 @@
+# Pinned from a working Python 3.12 environment (2026-07-21).
+# Install: pip install -r requirements.lock.txt
+# For normal development prefer requirements.txt (minimum versions).
+
+python-dotenv==1.2.2
+python-docx==1.2.0
+cursor-sdk==0.1.8
+pydantic==2.13.4
+httpx==0.28.1
+truststore==0.10.4
+openpyxl==3.1.5
+tzdata==2026.3

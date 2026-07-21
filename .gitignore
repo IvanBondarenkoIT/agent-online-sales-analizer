@@ -1,0 +1,16 @@
+.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+output/
+!output/report_partial.json
+logs/
+_preview.txt
+_snippet.txt
+*.log
+~$*
+*.xlsx#
+.DS_Store
+Thumbs.db
