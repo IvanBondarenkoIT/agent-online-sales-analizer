@@ -1,31 +1,20 @@
 # Инструкции ДимКава — Messenger
 
-Операционные гайды для менеджеров продаж.
-
-Playbooks и training — **вручную** (не перезаписываются `--export-docs`). 
-CTA/PRICE — автоген. См. [../SOURCES.md](../SOURCES.md).
+Пары **RU / GE** — полное зеркало. Оператору GE; тренеру RU.
 
 ## Кому что читать
 
 | Роль | Файл |
 |------|------|
-| **Оператор** (пишет клиентам) | [MANAGER_PLAYBOOK_GE.md](MANAGER_PLAYBOOK_GE.md) |
-| **Обучение** (теория + разборы) | [OPERATOR_TRAINING_GUIDE.md](OPERATOR_TRAINING_GUIDE.md) |
-| **Тренер / руководитель** | [MANAGER_PLAYBOOK.md](MANAGER_PLAYBOOK.md) |
-| Справочник CTA | [CTA_PLAYBOOK.md](CTA_PLAYBOOK.md) |
-| Ответ на вопрос о цене | [PRICE_RESPONSE_RULES.md](PRICE_RESPONSE_RULES.md) |
+| **Оператор** | [MANAGER_PLAYBOOK_GE.md](MANAGER_PLAYBOOK_GE.md) — чеклист §8 |
+| **Обучение GE** | [OPERATOR_TRAINING_GUIDE_GE.md](OPERATOR_TRAINING_GUIDE_GE.md) |
+| **Тренер RU** | [MANAGER_PLAYBOOK_RU.md](MANAGER_PLAYBOOK_RU.md) + [OPERATOR_TRAINING_GUIDE_RU.md](OPERATOR_TRAINING_GUIDE_RU.md) |
+| Процесс патча | [UPDATE_RULES.md](UPDATE_RULES.md) |
+| CTA | [CTA_PLAYBOOK_RU](CTA_PLAYBOOK_RU.md) / [GE](CTA_PLAYBOOK_GE.md) |
+| Цена | [PRICE_RESPONSE_RULES_RU](PRICE_RESPONSE_RULES_RU.md) / [GE](PRICE_RESPONSE_RULES_GE.md) |
 
-## Примеры из реальных диалогов
+## CRM
 
-Разборы переписок: [../analysis/dialogs/](../analysis/dialogs/)
-
-Таблица scores: [../analysis/APPENDIX_DIALOGS.md](../analysis/APPENDIX_DIALOGS.md)
-
-## CRM-анализ
-
-- Ежедневно: `py -3.12 main.py --analyze-crm-yesterday`
-- Недельный прогон: `py -3.12 main.py --crm-main-run` или `--crm-from` / `--crm-to`
-- SLA: 2 мин в рабочее время (10–18), 15 мин вне смены
-- Baseline: [../analysis/BASELINE.md](../analysis/BASELINE.md)
-- Отчёты: [../analysis/CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md](../analysis/CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md)
+- Ежедневно: `run_crm_daily.bat` / `--analyze-crm-yesterday`
+- Активный корпус: CRM с 14.07 — [../analysis/BASELINE.md](../analysis/BASELINE.md)
 

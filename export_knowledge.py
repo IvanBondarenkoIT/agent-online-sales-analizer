@@ -260,7 +260,8 @@ def _build_knowledge_base(
         f"**Обновлено:** {date.today().isoformat()}"
         + (f" (CRM {crm_date})" if crm_date else "")
         + "  \n",
-        "**Развёрнутое обучение:** [OPERATOR_TRAINING_GUIDE.md](../instructions/OPERATOR_TRAINING_GUIDE.md)\n",
+        "**Развёрнутое обучение:** [OPERATOR_TRAINING_GUIDE_RU.md](../instructions/OPERATOR_TRAINING_GUIDE_RU.md) / "
+        "[GE](../instructions/OPERATOR_TRAINING_GUIDE_GE.md)\n",
         "---\n",
         "## Метрики команды (бенчмарк)\n",
         "| Источник | Диалогов | needs_id | cta | deal_closed |",
@@ -439,7 +440,10 @@ def _build_knowledge_base(
         "- [ ] Конкретный CTA в конце?",
         "- [ ] Ответ < 15 мин?\n",
         "## Связанные документы\n",
-        "- [OPERATOR_TRAINING_GUIDE.md](../instructions/OPERATOR_TRAINING_GUIDE.md) — полное обучение",
+        "- [OPERATOR_TRAINING_GUIDE_RU.md](../instructions/OPERATOR_TRAINING_GUIDE_RU.md) / "
+        "[GE](../instructions/OPERATOR_TRAINING_GUIDE_GE.md) — полное обучение",
+        "- [MANAGER_PLAYBOOK_RU.md](../instructions/MANAGER_PLAYBOOK_RU.md) / "
+        "[GE](../instructions/MANAGER_PLAYBOOK_GE.md) — шпаргалка + чеклист",
         "- [MANAGER_PLAYBOOK_GE.md](../instructions/MANAGER_PLAYBOOK_GE.md) — шпаргалка",
         "- [CTA_PLAYBOOK.md](../instructions/CTA_PLAYBOOK.md)",
         "- [PRICE_RESPONSE_RULES.md](../instructions/PRICE_RESPONSE_RULES.md)",
@@ -517,9 +521,10 @@ def export_docs(settings: Settings) -> Path:
     avg_scores = aggregate.get("avg_scores", {})
     patterns_md = [
         "# Паттерны ошибок команды ДимКава\n",
-        "Источник: AI-анализ 42 диалогов (`output/report_41.json`).\n",
-        "Главный документ для менеджеров: [MANAGER_PLAYBOOK.md](../instructions/MANAGER_PLAYBOOK.md)\n",
-        "## Сводка по scores (42 диалога)\n",
+        "Источник: архив DOCX + актуальный CRM с 14.07 (`CRM_REPORT_*.md`).\n",
+        "Инструкции: [MANAGER_PLAYBOOK_RU.md](../instructions/MANAGER_PLAYBOOK_RU.md) / "
+        "[GE](../instructions/MANAGER_PLAYBOOK_GE.md)\n",
+        "## Сводка по scores (DOCX-архив; для правил смотри CRM)\n",
     ]
     if avg_scores:
         low_needs = sum(
@@ -566,134 +571,129 @@ def export_docs(settings: Settings) -> Path:
     kb_content = _build_knowledge_base(report, crm_reports, period_report)
     _write(analysis_dir / "KNOWLEDGE_BASE.md", kb_content)
 
-    price_md = [
-        "# Как отвечать на «ფასი?» / «რა ღირს»\n",
-        "## Плохо (паттерн Цена-Молчание)\n",
-        "```\n",
-        "გამარჯობა, ფასდაკლებით 1899 ლარია... სახლისთვის ეძებთ?\n",
-        "```\n",
-        "Цена в первом предложении — клиент получает цифру и уходит думать.\n",
-        "## Хорошо\n",
-        "```\n",
-        "გამარჯობა! სანამ ფასს გეტყვით — სახლისთვის გჭირდებათ თუ ბიზნესისთვის? "
-        "რომელი სასმელს მიირთმევთ ყველაზე ხშირად? ☕️\n",
-        "```\n",
-        "После ответа клиента:\n",
-        "```\n",
-        "ამ მოდელის ფასდაკლებით 1899 ლარია — ჩაშენებული საფქვავით და 8 სასმელით. "
-        "გსურთ ხვალ 15:00-ზე ვაკეში გაჩვენოთ, თუ ლინკი გამოგიგზავნოთ ონლაინ შესაძენად?\n",
-        "```\n",
-        "## Примеры ideal_response из разборов\n",
+    price_ru = [
+        "# Ответ на «ფასი?» (RU)\n",
+        "Полные правила: [MANAGER_PLAYBOOK_RU.md](MANAGER_PLAYBOOK_RU.md) §3 и §7.\n",
+        "GE: [PRICE_RESPONSE_RULES_GE.md](PRICE_RESPONSE_RULES_GE.md)\n",
+        "**Шаг 1 (без цены):**\n```\n",
+        "გამარჯობა [სახელი]! ☕️ სანამ ფასს გეტყვით —\n",
+        "სახლისთვის გჭირდებათ თუ ბიზნესისთვის?\n```\n",
+        "**Шаг 2:** одна цена + польза + CTA.\n",
+        "**Запрет:** цена в первом предложении; три цены подряд.\n",
     ]
-    for did, report in sorted(full_analyses.items()):
-        ideal = report["analysis"].get("ideal_response_georgian", "")
-        if ideal:
-            price_md.append(f"\n### Диалог #{did}\n{ideal}\n")
-    _write(instructions_dir / "PRICE_RESPONSE_RULES.md", "\n".join(price_md) + "\n")
+    price_ge = [
+        "# პასუხი «ფასი?»-ზე (GE)\n",
+        "სრული წესები: [MANAGER_PLAYBOOK_GE.md](MANAGER_PLAYBOOK_GE.md) §3 და §8.\n",
+        "RU: [PRICE_RESPONSE_RULES_RU.md](PRICE_RESPONSE_RULES_RU.md)\n",
+        "**ნაბიჯი 1:**\n```\n",
+        "გამარჯობა [სახელი]! ☕️ სანამ ფასს გეტყვით —\n",
+        "სახლისთვის გჭირდებათ თუ ბიზნესისთვის?\n```\n",
+        "**ნაბიჯი 2:** ერთი ფასი + სარგებელი + CTA.\n",
+    ]
+    _write(instructions_dir / "PRICE_RESPONSE_RULES_RU.md", "\n".join(price_ru) + "\n")
+    _write(instructions_dir / "PRICE_RESPONSE_RULES_GE.md", "\n".join(price_ge) + "\n")
+    _write(
+        instructions_dir / "PRICE_RESPONSE_RULES.md",
+        "# Перенаправление: ответ на цену\n\n"
+        "- [PRICE_RESPONSE_RULES_RU.md](PRICE_RESPONSE_RULES_RU.md)\n"
+        "- [PRICE_RESPONSE_RULES_GE.md](PRICE_RESPONSE_RULES_GE.md)\n",
+    )
 
-    cta_md = [
-        "# CTA Playbook (грузинский)\n",
-        "Каждый диалог должен заканчиваться **одним** конкретным действием.\n",
-        "## Шоурум თბილისი\n",
-        "- «გსურთ ხვალ 15:00-ზე ვაკეში, ფალიაშვილის 66-ზე გაჩვენოთ აპარატი?»",
-        "- «მობრძანდით ჩვენს სალონში — წინასწარ მოგვწერეთ, რომ ფასდაკლება გავაქტიუროთ»\n",
-        "## Онлайн / Messenger\n",
-        "- «გსურთ ლინკი გამოგიგზავნოთ ონლაინ შესაძენად?»",
-        "- «მოგწერეთ ნომერი — დაგიკავშირდებით და გავიარებთ დეტალებს»\n",
-        "## Сравнение / сомнение\n",
-        "- «გსურთ კონტაქტი კაფეს, სადაც უკვე მუშაობს ეს მოდელი?»",
-        "- «რა გაჩერებთ — ფასი, ზომა თუ რძიანი სასმელების ხარისხი?»\n",
-        "## После «მოვიფიქრებ»\n",
-        "- «რა გაჩერებთ გადაწყვეტილებაში? შემიძლია 2-3 ვარიანტი ფოტო/ვიდეო-თი გამოგიგზავნოთ»",
-        "- «გსურთ დავაჯავშნოთ ფასდაკლება 48 საათით?»\n",
-        "## Слабые CTA (избегать)\n",
-        "- «მოგვწერეთ ბიუჯეტი» — без рекомендации",
-        "- «ნებისმიერ კითხვაზე მოგვმართეთ» — пассивное закрытие",
+    cta_ru = [
+        "# CTA — шпаргалка (RU)\n",
+        "Полные правила: [MANAGER_PLAYBOOK_RU.md](MANAGER_PLAYBOOK_RU.md) §4.\n",
+        "GE: [CTA_PLAYBOOK_GE.md](CTA_PLAYBOOK_GE.md)\n",
+        "| Нельзя | Надо |\n|--------|------|\n",
+        "| `მოგვწერეთ ბიუჯეტი` | `გსურთ ხვალ 15:00-ზე ვაკეში გაჩვენოთ?` |\n",
+        "| `ნებისმიერ კითხვაზე მოგვმართეთ` | `გსურთ ლინკი გამოგიგზავნოთ ონლაინ შესაძენად?` |\n",
+        "| `განიხილავთ ამ ვარიანტს?` | `დავაჯავშნოთ ფასდაკლება 48 საათით?` |\n",
     ]
-    _write(instructions_dir / "CTA_PLAYBOOK.md", "\n".join(cta_md) + "\n")
+    cta_ge = [
+        "# CTA — შპარგალკა (GE)\n",
+        "სრული წესები: [MANAGER_PLAYBOOK_GE.md](MANAGER_PLAYBOOK_GE.md) §4.\n",
+        "RU: [CTA_PLAYBOOK_RU.md](CTA_PLAYBOOK_RU.md)\n",
+        "| არა | კი |\n|----|-----|\n",
+        "| `მოგვწერეთ ბიუჯეტი` | `გსურთ ხვალ 15:00-ზე ვაკეში გაჩვენოთ?` |\n",
+        "| `ნებისმიერ კითხვაზე მოგვმართეთ` | `გსურთ ლინკი გამოგიგზავნოთ ონლაინ შესაძენად?` |\n",
+        "| `განიხილავთ ამ ვარიანტს?` | `დავაჯავშნოთ ფასდაკლება 48 საათით?` |\n",
+    ]
+    _write(instructions_dir / "CTA_PLAYBOOK_RU.md", "\n".join(cta_ru) + "\n")
+    _write(instructions_dir / "CTA_PLAYBOOK_GE.md", "\n".join(cta_ge) + "\n")
+    _write(
+        instructions_dir / "CTA_PLAYBOOK.md",
+        "# Перенаправление CTA\n\n"
+        "- [CTA_PLAYBOOK_RU.md](CTA_PLAYBOOK_RU.md)\n"
+        "- [CTA_PLAYBOOK_GE.md](CTA_PLAYBOOK_GE.md)\n",
+    )
 
     summary = [
         "# Сводка анализа переписок\n",
-        f"- Источник: `{settings.input_file.name}`",
+        f"- Источник DOCX (архив): `{settings.input_file.name}`",
         f"- Секций диалогов: {parsed.get('dialogs_count', len(parsed.get('dialogs', [])))}",
-        f"- Полный AI-разбор: **{len(full_analyses)}** диалогов",
+        f"- Полный AI-разбор DOCX: **{len(full_analyses)}** диалогов",
         f"- Предупреждения: {', '.join(parsed.get('warnings', [])) or '—'}\n",
+        "**Актуальные выводы для инструкций:** CRM с 14.07 — см. `CRM_REPORT_*.md` "
+        "и [UPDATE_RULES.md](instructions/UPDATE_RULES.md).\n",
         "## Файлы\n",
         "| Файл | Описание |",
         "|------|----------|",
-        "| `output/report_41.json` | Полный AI-разбор 42 диалогов |",
-        "| `output/parsed_dialogs.json` | 42 диалога, сырой текст |\n",
+        "| `output/report_41.json` | Архив DOCX-разбора |",
+        "| `output/crm_report_*.json` | Актуальный CRM |\n",
         "## Документация\n",
         "### Инструкции ([instructions/](instructions/))\n",
-        "- **[MANAGER_PLAYBOOK.md](instructions/MANAGER_PLAYBOOK.md)** — RU + GE (тренер), **вручную**",
-        "- **[MANAGER_PLAYBOOK_GE.md](instructions/MANAGER_PLAYBOOK_GE.md)** — GE (оператор), **вручную**",
-        "- **[OPERATOR_TRAINING_GUIDE.md](instructions/OPERATOR_TRAINING_GUIDE.md)** — обучение, **вручную**",
-        "- [CTA_PLAYBOOK.md](instructions/CTA_PLAYBOOK.md) — автоген",
-        "- [PRICE_RESPONSE_RULES.md](instructions/PRICE_RESPONSE_RULES.md) — автоген\n",
+        "- **[MANAGER_PLAYBOOK_RU.md](instructions/MANAGER_PLAYBOOK_RU.md)** / "
+        "**[GE](instructions/MANAGER_PLAYBOOK_GE.md)**",
+        "- **[OPERATOR_TRAINING_GUIDE_RU.md](instructions/OPERATOR_TRAINING_GUIDE_RU.md)** / "
+        "**[GE](instructions/OPERATOR_TRAINING_GUIDE_GE.md)**",
+        "- [UPDATE_RULES.md](instructions/UPDATE_RULES.md)",
+        "- CTA/PRICE stubs: `*_RU.md` / `*_GE.md`\n",
         "### Анализ ([analysis/](analysis/))\n",
-        "- [APPENDIX_DIALOGS.md](analysis/APPENDIX_DIALOGS.md) — таблица scores и killer_phrases",
-        "- [SALES_PATTERNS.md](analysis/SALES_PATTERNS.md)",
+        "- [BASELINE.md](analysis/BASELINE.md) — активный корпус = CRM с 14.07",
         "- [KNOWLEDGE_BASE.md](analysis/KNOWLEDGE_BASE.md)",
-        "- [BASELINE.md](analysis/BASELINE.md) — CRM baseline week",
-        "- [dialogs/](analysis/dialogs/)\n",
+        "- `CRM_REPORT_*.md`\n",
         "См. [SOURCES.md](SOURCES.md).\n",
     ]
     _write(docs_dir / "ANALYSIS_SUMMARY.md", "\n".join(summary) + "\n")
 
     readme = [
         "# Документация ДимКава Sales Analyzer\n",
-        "Часть файлов **ручная**, часть — автоген (без API для `--export-docs`).\n",
-        "См. [SOURCES.md](SOURCES.md) — что править вручную.\n",
-        "Перегенерация анализа/KB/CTA: `py -3.12 main.py --export-docs`  ",
-        "(не трогает playbooks и `OPERATOR_TRAINING_GUIDE`)\n",
-        "## Инструкции для сотрудников\n",
-        "Папка **[instructions/](instructions/)** — гайды и скрипты для Messenger.\n",
-        "**Вручную:**",
-        "- **[MANAGER_PLAYBOOK.md](instructions/MANAGER_PLAYBOOK.md)** — RU + перевод GE (тренер)",
-        "- **[MANAGER_PLAYBOOK_GE.md](instructions/MANAGER_PLAYBOOK_GE.md)** — только GE (оператор)",
-        "- **[OPERATOR_TRAINING_GUIDE.md](instructions/OPERATOR_TRAINING_GUIDE.md)** — обучение + разборы CRM\n",
-        "**Автоген (`--export-docs`):**",
-        "- [CTA_PLAYBOOK.md](instructions/CTA_PLAYBOOK.md) — призывы к действию",
-        "- [PRICE_RESPONSE_RULES.md](instructions/PRICE_RESPONSE_RULES.md) — ответ на «ფასი?»\n",
-        "## Результаты анализа\n",
-        "Папка **[analysis/](analysis/)**.\n",
-        "**DOCX / KB (автоген):**",
-        "- [APPENDIX_DIALOGS.md](analysis/APPENDIX_DIALOGS.md) — таблица всех диалогов",
-        "- [SALES_PATTERNS.md](analysis/SALES_PATTERNS.md) — паттерны ошибок",
-        "- [KNOWLEDGE_BASE.md](analysis/KNOWLEDGE_BASE.md) — база для суфлёра",
-        "- [dialogs/](analysis/dialogs/) — разборы по диалогам\n",
-        "**CRM (пайплайн `crm_analysis` / `crm_batch`):**",
-        "- [BASELINE.md](analysis/BASELINE.md) — замороженная неделя 14–20.07.2026",
-        "- [CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md](analysis/CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md)",
-        "- дневные `CRM_REPORT_YYYY-MM-DD.md`\n",
+        "См. [SOURCES.md](SOURCES.md).\n",
+        "Актуальные инструкции — пары **RU / GE** (вручную). ",
+        "`--export-docs` не перезаписывает Playbook/Training.\n",
+        "## Инструкции\n",
+        "| Роль | RU | GE |",
+        "|------|----|----|",
+        "| Шпаргалка + чеклист | [MANAGER_PLAYBOOK_RU](instructions/MANAGER_PLAYBOOK_RU.md) | "
+        "[MANAGER_PLAYBOOK_GE](instructions/MANAGER_PLAYBOOK_GE.md) |",
+        "| Обучение | [OPERATOR_TRAINING_GUIDE_RU](instructions/OPERATOR_TRAINING_GUIDE_RU.md) | "
+        "[OPERATOR_TRAINING_GUIDE_GE](instructions/OPERATOR_TRAINING_GUIDE_GE.md) |",
+        "| Обновление | [UPDATE_RULES](instructions/UPDATE_RULES.md) | — |\n",
+        "Оператору: Playbook GE §8 (чеклист).\n",
+        "## Анализ\n",
+        "- CRM с 14.07: `CRM_REPORT_*.md`, [BASELINE.md](analysis/BASELINE.md)",
+        "- [KNOWLEDGE_BASE.md](analysis/KNOWLEDGE_BASE.md) (автоген)\n",
         "## Прочее\n",
-        "- [ANALYSIS_SUMMARY.md](ANALYSIS_SUMMARY.md) — сводка проекта",
-        "- [CHANGELOG.md](../CHANGELOG.md) — статус релизов\n",
+        "- [ANALYSIS_SUMMARY.md](ANALYSIS_SUMMARY.md)",
+        "- [CHANGELOG.md](../CHANGELOG.md)\n",
     ]
 
     instructions_readme = [
         "# Инструкции ДимКава — Messenger\n",
-        "Операционные гайды для менеджеров продаж.\n",
-        "Playbooks и training — **вручную** (не перезаписываются `--export-docs`). ",
-        "CTA/PRICE — автоген. См. [../SOURCES.md](../SOURCES.md).\n",
+        "Пары **RU / GE** — полное зеркало. Оператору GE; тренеру RU.\n",
         "## Кому что читать\n",
         "| Роль | Файл |",
         "|------|------|",
-        "| **Оператор** (пишет клиентам) | [MANAGER_PLAYBOOK_GE.md](MANAGER_PLAYBOOK_GE.md) |",
-        "| **Обучение** (теория + разборы) | [OPERATOR_TRAINING_GUIDE.md](OPERATOR_TRAINING_GUIDE.md) |",
-        "| **Тренер / руководитель** | [MANAGER_PLAYBOOK.md](MANAGER_PLAYBOOK.md) |",
-        "| Справочник CTA | [CTA_PLAYBOOK.md](CTA_PLAYBOOK.md) |",
-        "| Ответ на вопрос о цене | [PRICE_RESPONSE_RULES.md](PRICE_RESPONSE_RULES.md) |\n",
-        "## Примеры из реальных диалогов\n",
-        "Разборы переписок: [../analysis/dialogs/](../analysis/dialogs/)\n",
-        "Таблица scores: [../analysis/APPENDIX_DIALOGS.md](../analysis/APPENDIX_DIALOGS.md)\n",
-        "## CRM-анализ\n",
-        "- Ежедневно: `py -3.12 main.py --analyze-crm-yesterday`",
-        "- Недельный прогон: `py -3.12 main.py --crm-main-run` или `--crm-from` / `--crm-to`",
-        "- SLA: 2 мин в рабочее время (10–18), 15 мин вне смены",
-        "- Baseline: [../analysis/BASELINE.md](../analysis/BASELINE.md)",
-        "- Отчёты: [../analysis/CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md]"
-        "(../analysis/CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md)\n",
+        "| **Оператор** | [MANAGER_PLAYBOOK_GE.md](MANAGER_PLAYBOOK_GE.md) — чеклист §8 |",
+        "| **Обучение GE** | [OPERATOR_TRAINING_GUIDE_GE.md](OPERATOR_TRAINING_GUIDE_GE.md) |",
+        "| **Тренер RU** | [MANAGER_PLAYBOOK_RU.md](MANAGER_PLAYBOOK_RU.md) + "
+        "[OPERATOR_TRAINING_GUIDE_RU.md](OPERATOR_TRAINING_GUIDE_RU.md) |",
+        "| Процесс патча | [UPDATE_RULES.md](UPDATE_RULES.md) |",
+        "| CTA | [CTA_PLAYBOOK_RU](CTA_PLAYBOOK_RU.md) / [GE](CTA_PLAYBOOK_GE.md) |",
+        "| Цена | [PRICE_RESPONSE_RULES_RU](PRICE_RESPONSE_RULES_RU.md) / "
+        "[GE](PRICE_RESPONSE_RULES_GE.md) |\n",
+        "## CRM\n",
+        "- Ежедневно: `run_crm_daily.bat` / `--analyze-crm-yesterday`",
+        "- Активный корпус: CRM с 14.07 — [../analysis/BASELINE.md](../analysis/BASELINE.md)\n",
     ]
     _write(instructions_dir / "README.md", "\n".join(instructions_readme) + "\n")
     _write(docs_dir / "README.md", "\n".join(readme) + "\n")

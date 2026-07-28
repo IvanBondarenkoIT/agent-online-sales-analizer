@@ -4,9 +4,9 @@ Python-приложение для анализа переписок Facebook Me
 
 ## Статус проекта
 
-**Готово (0.2.0):** ретро-анализ DOCX (Stage‑1), операционные playbooks + training, CRM daily/weekly с SLA рабочего времени и Excel.  
+**Готово (0.3.0):** инструкции RU/GE (Playbook + Training), чеклист оператора, CRM daily/weekly, корпус правил с 14.07.  
 **Отложено:** суфлёр UI, OpenRouter как основной путь.  
-Подробности: [CHANGELOG.md](CHANGELOG.md) · источники правды: [docs/SOURCES.md](docs/SOURCES.md) · baseline: [docs/analysis/BASELINE.md](docs/analysis/BASELINE.md)
+[CHANGELOG](CHANGELOG.md) · [SOURCES](docs/SOURCES.md) · [UPDATE_RULES](docs/instructions/UPDATE_RULES.md) · [BASELINE](docs/analysis/BASELINE.md)
 
 ## Ежедневный запуск (Windows)
 

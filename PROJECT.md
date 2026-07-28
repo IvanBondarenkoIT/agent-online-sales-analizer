@@ -80,26 +80,14 @@ agent-online-sales-analizer/
 
 ## Документация (`docs/`)
 
-См. [docs/SOURCES.md](docs/SOURCES.md): playbooks и training — **вручную**; KB/CTA/dialogs — `--export-docs`; CRM MD — пайплайн CRM.
+Активные инструкции — пары RU/GE. Корпус правил: **CRM с 14.07**. См. [docs/SOURCES.md](docs/SOURCES.md), [docs/instructions/UPDATE_RULES.md](docs/instructions/UPDATE_RULES.md).
 
 | Файл | Назначение |
 |------|------------|
-| [docs/README.md](docs/README.md) | Главное оглавление |
-| [docs/SOURCES.md](docs/SOURCES.md) | Source of truth |
-| [docs/instructions/](docs/instructions/) | **Инструкции для менеджеров** |
-| [docs/instructions/MANAGER_PLAYBOOK.md](docs/instructions/MANAGER_PLAYBOOK.md) | RU + перевод GE (тренер), вручную |
-| [docs/instructions/MANAGER_PLAYBOOK_GE.md](docs/instructions/MANAGER_PLAYBOOK_GE.md) | Только GE (оператор), вручную |
-| [docs/instructions/OPERATOR_TRAINING_GUIDE.md](docs/instructions/OPERATOR_TRAINING_GUIDE.md) | Обучение + кейсы CRM, вручную |
-| [docs/instructions/CTA_PLAYBOOK.md](docs/instructions/CTA_PLAYBOOK.md) | CTA на грузинском (автоген) |
-| [docs/instructions/PRICE_RESPONSE_RULES.md](docs/instructions/PRICE_RESPONSE_RULES.md) | Ответ на «ფასი?» (автоген) |
-| [docs/analysis/](docs/analysis/) | Результаты анализа + CRM |
-| [docs/analysis/BASELINE.md](docs/analysis/BASELINE.md) | Замороженная CRM-неделя |
-| [docs/analysis/APPENDIX_DIALOGS.md](docs/analysis/APPENDIX_DIALOGS.md) | Таблица scores (автоген) |
-| [docs/analysis/SALES_PATTERNS.md](docs/analysis/SALES_PATTERNS.md) | Паттерны ошибок |
-| [docs/analysis/KNOWLEDGE_BASE.md](docs/analysis/KNOWLEDGE_BASE.md) | База знаний для суфлёра |
-| [docs/analysis/dialogs/](docs/analysis/dialogs/) | Разборы по диалогам |
-| [docs/ANALYSIS_SUMMARY.md](docs/ANALYSIS_SUMMARY.md) | Сводка проекта |
-
+| [MANAGER_PLAYBOOK_RU.md](docs/instructions/MANAGER_PLAYBOOK_RU.md) / [GE](docs/instructions/MANAGER_PLAYBOOK_GE.md) | Шпаргалка + **чеклист оператора** |
+| [OPERATOR_TRAINING_GUIDE_RU.md](docs/instructions/OPERATOR_TRAINING_GUIDE_RU.md) / [GE](docs/instructions/OPERATOR_TRAINING_GUIDE_GE.md) | Обучение + кейсы CRM |
+| [UPDATE_RULES.md](docs/instructions/UPDATE_RULES.md) | Как патчить инструкции после новых дней |
+| [BASELINE.md](docs/analysis/BASELINE.md) | Активный корпус = CRM с 14.07 |
 ---
 
 ## CLI

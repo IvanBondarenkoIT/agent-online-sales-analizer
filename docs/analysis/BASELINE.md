@@ -1,31 +1,24 @@
 # Baseline артефактов
 
-## Исторический корпус (DOCX)
+## Активный корпус (для инструкций)
 
-| Артефакт | Описание |
-|----------|----------|
-| `dav.docx` | Исходные переписки (маркеры `#1`…`#41`, дубликат `#14`) |
-| `output/report_41.json` | Полный LLM-разбор (локально, в git не хранится) |
-| `docs/analysis/dialogs/` | Разборы MD |
-| `docs/analysis/APPENDIX_DIALOGS.md`, `SALES_PATTERNS.md`, `KNOWLEDGE_BASE.md` | Автоген из отчёта + CRM |
+**CRM с 2026-07-14** — дневные и period отчёты в `docs/analysis/CRM_REPORT_*.md`.
 
-Пересборка MD: `py -3.12 main.py --export-docs`
+Текущий срез инструкций: **14.07–27.07.2026** (209 диалогов).  
+Обновление правил: [../instructions/UPDATE_RULES.md](../instructions/UPDATE_RULES.md).
 
-## CRM-неделя (первый baseline)
-
-**Период:** 2026-07-14 — 2026-07-20 (пн–вс)
-
-| Артефакт | Где |
-|----------|-----|
-| Дневные / period MD | `docs/analysis/CRM_REPORT_*.md`, `CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md` |
-| JSON / Excel | `output/` (локально; пересобираются CLI) |
-
-Пересчёт периода (дорого по LLM, если без `--crm-force` — skip существующих JSON):
+Пересчёт / новые дни:
 
 ```bash
-py -3.12 main.py --crm-from 2026-07-14 --crm-to 2026-07-20
-py -3.12 main.py --recalc-crm-rt --crm-date 2026-07-20   # только скорость
-py -3.12 main.py --export-crm-excel
+run_crm_daily.bat
+run_crm_period.bat 2026-07-14 2026-07-27
 ```
 
-В git фиксируем **MD-отчёты** и инструкции; сырьё `crm_raw/` и большие JSON остаются локально.
+## Архив DOCX (июнь 2026)
+
+| Артефакт | Роль |
+|----------|------|
+| `dav.docx`, `output/report_41.json` | Исторический разбор |
+| `docs/analysis/dialogs/` | Архив кейсов открытия проблем |
+
+**Не использовать** для новых правил Playbook/Training.

@@ -5,7 +5,7 @@
 
 **Обновлено:** 2026-07-28 (CRM 2026-07-27)  
 
-**Развёрнутое обучение:** [OPERATOR_TRAINING_GUIDE.md](../instructions/OPERATOR_TRAINING_GUIDE.md)
+**Развёрнутое обучение:** [OPERATOR_TRAINING_GUIDE_RU.md](../instructions/OPERATOR_TRAINING_GUIDE_RU.md) / [GE](../instructions/OPERATOR_TRAINING_GUIDE_GE.md)
 
 ---
 
@@ -212,7 +212,8 @@
 
 ## Связанные документы
 
-- [OPERATOR_TRAINING_GUIDE.md](../instructions/OPERATOR_TRAINING_GUIDE.md) — полное обучение
+- [OPERATOR_TRAINING_GUIDE_RU.md](../instructions/OPERATOR_TRAINING_GUIDE_RU.md) / [GE](../instructions/OPERATOR_TRAINING_GUIDE_GE.md) — полное обучение
+- [MANAGER_PLAYBOOK_RU.md](../instructions/MANAGER_PLAYBOOK_RU.md) / [GE](../instructions/MANAGER_PLAYBOOK_GE.md) — шпаргалка + чеклист
 - [MANAGER_PLAYBOOK_GE.md](../instructions/MANAGER_PLAYBOOK_GE.md) — шпаргалка
 - [CTA_PLAYBOOK.md](../instructions/CTA_PLAYBOOK.md)
 - [PRICE_RESPONSE_RULES.md](../instructions/PRICE_RESPONSE_RULES.md)

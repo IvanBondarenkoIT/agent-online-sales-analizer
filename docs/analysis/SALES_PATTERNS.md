@@ -1,10 +1,10 @@
 # Паттерны ошибок команды ДимКава
 
-Источник: AI-анализ 42 диалогов (`output/report_41.json`).
+Источник: архив DOCX + актуальный CRM с 14.07 (`CRM_REPORT_*.md`).
 
-Главный документ для менеджеров: [MANAGER_PLAYBOOK.md](../instructions/MANAGER_PLAYBOOK.md)
+Инструкции: [MANAGER_PLAYBOOK_RU.md](../instructions/MANAGER_PLAYBOOK_RU.md) / [GE](../instructions/MANAGER_PLAYBOOK_GE.md)
 
-## Сводка по scores (42 диалога)
+## Сводка по scores (DOCX-архив; для правил смотри CRM)
 
 - Средний **needs_id**: 1.52 / 5
 - Средний **cta**: 2.02 / 5

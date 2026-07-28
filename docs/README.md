@@ -1,42 +1,27 @@
 # Документация ДимКава Sales Analyzer
 
-Часть файлов **ручная**, часть — автоген (без API для `--export-docs`).
+См. [SOURCES.md](SOURCES.md).
 
-См. [SOURCES.md](SOURCES.md) — что править вручную.
+Актуальные инструкции — пары **RU / GE** (вручную). 
+`--export-docs` не перезаписывает Playbook/Training.
 
-Перегенерация анализа/KB/CTA: `py -3.12 main.py --export-docs`  
-(не трогает playbooks и `OPERATOR_TRAINING_GUIDE`)
+## Инструкции
 
-## Инструкции для сотрудников
+| Роль | RU | GE |
+|------|----|----|
+| Шпаргалка + чеклист | [MANAGER_PLAYBOOK_RU](instructions/MANAGER_PLAYBOOK_RU.md) | [MANAGER_PLAYBOOK_GE](instructions/MANAGER_PLAYBOOK_GE.md) |
+| Обучение | [OPERATOR_TRAINING_GUIDE_RU](instructions/OPERATOR_TRAINING_GUIDE_RU.md) | [OPERATOR_TRAINING_GUIDE_GE](instructions/OPERATOR_TRAINING_GUIDE_GE.md) |
+| Обновление | [UPDATE_RULES](instructions/UPDATE_RULES.md) | — |
 
-Папка **[instructions/](instructions/)** — гайды и скрипты для Messenger.
+Оператору: Playbook GE §8 (чеклист).
 
-**Вручную:**
-- **[MANAGER_PLAYBOOK.md](instructions/MANAGER_PLAYBOOK.md)** — RU + перевод GE (тренер)
-- **[MANAGER_PLAYBOOK_GE.md](instructions/MANAGER_PLAYBOOK_GE.md)** — только GE (оператор)
-- **[OPERATOR_TRAINING_GUIDE.md](instructions/OPERATOR_TRAINING_GUIDE.md)** — обучение + разборы CRM
+## Анализ
 
-**Автоген (`--export-docs`):**
-- [CTA_PLAYBOOK.md](instructions/CTA_PLAYBOOK.md) — призывы к действию
-- [PRICE_RESPONSE_RULES.md](instructions/PRICE_RESPONSE_RULES.md) — ответ на «ფასი?»
-
-## Результаты анализа
-
-Папка **[analysis/](analysis/)**.
-
-**DOCX / KB (автоген):**
-- [APPENDIX_DIALOGS.md](analysis/APPENDIX_DIALOGS.md) — таблица всех диалогов
-- [SALES_PATTERNS.md](analysis/SALES_PATTERNS.md) — паттерны ошибок
-- [KNOWLEDGE_BASE.md](analysis/KNOWLEDGE_BASE.md) — база для суфлёра
-- [dialogs/](analysis/dialogs/) — разборы по диалогам
-
-**CRM (пайплайн `crm_analysis` / `crm_batch`):**
-- [BASELINE.md](analysis/BASELINE.md) — замороженная неделя 14–20.07.2026
-- [CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md](analysis/CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md)
-- дневные `CRM_REPORT_YYYY-MM-DD.md`
+- CRM с 14.07: `CRM_REPORT_*.md`, [BASELINE.md](analysis/BASELINE.md)
+- [KNOWLEDGE_BASE.md](analysis/KNOWLEDGE_BASE.md) (автоген)
 
 ## Прочее
 
-- [ANALYSIS_SUMMARY.md](ANALYSIS_SUMMARY.md) — сводка проекта
-- [CHANGELOG.md](../CHANGELOG.md) — статус релизов
+- [ANALYSIS_SUMMARY.md](ANALYSIS_SUMMARY.md)
+- [CHANGELOG.md](../CHANGELOG.md)
 
