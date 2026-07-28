@@ -1,6 +1,6 @@
 # Документация ДимКава Sales Analyzer
 
-Оглавление `docs/`. Часть файлов **ручная**, часть — автоген (без API для `--export-docs`).
+Часть файлов **ручная**, часть — автоген (без API для `--export-docs`).
 
 См. [SOURCES.md](SOURCES.md) — что править вручную.
 
@@ -32,10 +32,11 @@
 
 **CRM (пайплайн `crm_analysis` / `crm_batch`):**
 - [BASELINE.md](analysis/BASELINE.md) — замороженная неделя 14–20.07.2026
-- [CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md](analysis/CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md) — сводка периода
+- [CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md](analysis/CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md)
 - дневные `CRM_REPORT_YYYY-MM-DD.md`
 
 ## Прочее
 
 - [ANALYSIS_SUMMARY.md](ANALYSIS_SUMMARY.md) — сводка проекта
 - [CHANGELOG.md](../CHANGELOG.md) — статус релизов
+

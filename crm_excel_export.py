@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +44,36 @@ TITLE_FONT = Font(bold=True, size=14)
 SUBTITLE_FONT = Font(bold=True, size=11)
 WRAP = Alignment(wrap_text=True, vertical="top")
 CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+
+def _save_workbook_atomic(wb: Workbook, path: Path, *, retries: int = 3) -> Path:
+    """Save workbook via temp file + os.replace; clear error if Excel locks the target."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.stem}.{uuid.uuid4().hex[:8]}.tmp.xlsx")
+    last_err: BaseException | None = None
+    try:
+        for attempt in range(1, retries + 1):
+            try:
+                wb.save(tmp)
+                os.replace(tmp, path)
+                return path
+            except PermissionError as exc:
+                last_err = exc
+                if attempt < retries:
+                    time.sleep(0.4 * attempt)
+                    continue
+                raise PermissionError(
+                    f"Не удалось записать {path.name}: файл открыт в Excel. "
+                    f"Закройте {path.name} и повторите."
+                ) from last_err
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+    raise RuntimeError(f"Failed to save {path}")  # pragma: no cover
 
 
 def _format_duration(seconds: float | None) -> str:
@@ -289,7 +322,7 @@ def write_daily_excel(report: CrmAnalysisReport, path: Path) -> Path:
         ws.cell(row=r, column=1, value=f"{i}. {act}")
         r += 1
 
-    wb.save(path)
+    _save_workbook_atomic(wb, path)
     return path
 
 
@@ -475,7 +508,7 @@ def write_master_excel(reports: list[CrmAnalysisReport], path: Path) -> Path:
     ws_leg.append(["—", "Первый день в серии"])
     _auto_width(ws_leg)
 
-    wb.save(path)
+    _save_workbook_atomic(wb, path)
     return path
 
 
@@ -604,22 +637,25 @@ def write_period_excel(
         chart.set_categories(cats)
         ws_ch.add_chart(chart, "A3")
 
-    wb.save(path)
+    _save_workbook_atomic(wb, path)
     return path
 
 
 def export_crm_excel(report: CrmAnalysisReport, excel_dir: Path) -> dict[str, str]:
-    """Write daily + update master summary."""
+    """Write daily + update master summary.
+
+    Master failure after a successful daily write is not swallowed — callers see
+    PermissionError with a clear «close Excel» message.
+    """
     date_str = report.meta.target_date
     daily_path = excel_dir / f"CRM_DAILY_{date_str}.xlsx"
     master_path = excel_dir / "CRM_SUMMARY.xlsx"
 
     write_daily_excel(report, daily_path)
 
-    all_reports = load_all_daily_reports(excel_dir.parent)
-    if report.meta.target_date not in {r.meta.target_date for r in all_reports}:
-        all_reports.append(report)
-        all_reports.sort(key=lambda r: r.meta.target_date)
+    by_date = {r.meta.target_date: r for r in load_all_daily_reports(excel_dir.parent)}
+    by_date[report.meta.target_date] = report
+    all_reports = sorted(by_date.values(), key=lambda r: r.meta.target_date)
     write_master_excel(all_reports, master_path)
 
     return {"daily": str(daily_path), "master": str(master_path)}

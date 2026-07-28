@@ -247,6 +247,19 @@ def main() -> int:
                 print(f"Excel (день):  {excel_daily}")
             if excel_master.exists():
                 print(f"Excel (свод):  {excel_master}")
+                if excel_daily.exists() and excel_master.stat().st_mtime < excel_daily.stat().st_mtime:
+                    print(
+                        "WARNING: CRM_SUMMARY.xlsx старше дневного файла — "
+                        "свод мог не обновиться (закройте его в Excel и "
+                        "запустите: py -3.12 main.py --export-crm-excel)",
+                        file=sys.stderr,
+                    )
+            else:
+                print(
+                    "WARNING: CRM_SUMMARY.xlsx не найден после анализа — "
+                    "запустите: py -3.12 main.py --export-crm-excel",
+                    file=sys.stderr,
+                )
         elif args.parse_only:
             path = run_parse_only(settings)
             print(f"Parsed dialogs saved to: {path}")

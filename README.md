@@ -8,6 +8,18 @@ Python-приложение для анализа переписок Facebook Me
 **Отложено:** суфлёр UI, OpenRouter как основной путь.  
 Подробности: [CHANGELOG.md](CHANGELOG.md) · источники правды: [docs/SOURCES.md](docs/SOURCES.md) · baseline: [docs/analysis/BASELINE.md](docs/analysis/BASELINE.md)
 
+## Ежедневный запуск (Windows)
+
+Закройте `CRM_SUMMARY.xlsx` в Excel, затем двойной клик или из консоли:
+
+```bat
+run_crm_daily.bat                 :: полный цикл за вчера
+run_crm_daily.bat 2026-07-22      :: за конкретную дату
+run_crm_period.bat 2026-07-22 2026-07-23   :: несколько дней + period
+```
+
+Цикл: fetch CRM → LLM → JSON/MD/Excel (в т.ч. обновление summary) → `--export-docs`.
+
 ## Быстрый старт
 
 ```bash

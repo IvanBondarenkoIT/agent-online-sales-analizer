@@ -2,7 +2,8 @@
 
 Операционные гайды для менеджеров продаж.
 
-Playbooks и training — **вручную** (не перезаписываются `--export-docs`). CTA/PRICE — автоген. См. [../SOURCES.md](../SOURCES.md).
+Playbooks и training — **вручную** (не перезаписываются `--export-docs`). 
+CTA/PRICE — автоген. См. [../SOURCES.md](../SOURCES.md).
 
 ## Кому что читать
 
@@ -27,3 +28,4 @@ Playbooks и training — **вручную** (не перезаписывают�
 - SLA: 2 мин в рабочее время (10–18), 15 мин вне смены
 - Baseline: [../analysis/BASELINE.md](../analysis/BASELINE.md)
 - Отчёты: [../analysis/CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md](../analysis/CRM_REPORT_PERIOD_2026-07-14_2026-07-20.md)
+
