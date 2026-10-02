@@ -57,10 +57,15 @@ def main() -> int:
         help="Сгенерировать Excel из сохранённого crm_report_*.json (без LLM)",
     )
     parser.add_argument(
+        "--export-crm-mobile",
+        action="store_true",
+        help="Сгенерировать мобильный дайджест MD+HTML из crm_report_*.json (без LLM)",
+    )
+    parser.add_argument(
         "--crm-date",
         type=str,
         default=None,
-        help="Дата CRM-анализа YYYY-MM-DD (с --analyze-crm-yesterday или --export-crm-excel)",
+        help="Дата CRM-анализа YYYY-MM-DD (с --analyze-crm-yesterday / --export-crm-excel / --export-crm-mobile)",
     )
     parser.add_argument(
         "--crm-main-run",
@@ -82,13 +87,24 @@ def main() -> int:
     parser.add_argument(
         "--crm-force",
         action="store_true",
-        help="Пересчитать день даже если crm_report_*.json уже есть",
+        help="Пересчитать день даже если crm_report_*.json уже есть (--crm-date / период)",
     )
     parser.add_argument(
         "--recalc-crm-rt",
         action="store_true",
         help="Пересчитать метрики скорости из raw JSONL без LLM (--crm-date или все дни)",
     )
+    parser.add_argument(
+        "--crm-compare-operators",
+        action="store_true",
+        help="Сравнить два окна дат операторов (без LLM, из готовых дневных JSON)",
+    )
+    parser.add_argument("--op-a-name", type=str, default="Основной", help="Имя оператора A (база)")
+    parser.add_argument("--op-a-from", type=str, default=None, help="Начало окна A YYYY-MM-DD")
+    parser.add_argument("--op-a-to", type=str, default=None, help="Конец окна A YYYY-MM-DD")
+    parser.add_argument("--op-b-name", type=str, default="Замена", help="Имя оператора B (сравнение)")
+    parser.add_argument("--op-b-from", type=str, default=None, help="Начало окна B YYYY-MM-DD")
+    parser.add_argument("--op-b-to", type=str, default=None, help="Конец окна B YYYY-MM-DD")
     parser.add_argument(
         "--input",
         type=str,
@@ -103,12 +119,14 @@ def main() -> int:
         args.parse_only,
         args.fetch_crm,
         args.analyze_crm_yesterday,
-        args.crm_date and not args.export_crm_excel,
+        args.crm_date and not args.export_crm_excel and not args.export_crm_mobile,
         args.export_crm_excel,
+        args.export_crm_mobile,
         args.crm_main_run,
         args.crm_from,
         args.crm_to,
         args.recalc_crm_rt,
+        args.crm_compare_operators,
     ]):
         parser.print_help()
         print(
@@ -116,7 +134,9 @@ def main() -> int:
             "--fetch-crm — переписки из Leeloo CRM. "
             "--analyze-crm-yesterday — ежедневный CRM-анализ за вчера. "
             "--crm-main-run — основной прогон за прошлую неделю. "
-            "--analyze — только когда нужен новый LLM-прогон DOCX."
+            "--export-crm-mobile — дайджест для телефона (MD+HTML). "
+            "--analyze — только когда нужен новый LLM-прогон DOCX. "
+            "--crm-compare-operators — сравнение двух окон операторов."
         )
         return 0
 
@@ -146,6 +166,17 @@ def main() -> int:
             print(f"Markdown:  {summary['markdown']}")
             if summary.get("manifest"):
                 print(f"Manifest:  {summary['manifest']}")
+        elif args.export_crm_mobile:
+            from crm_mobile_export import export_mobile_from_output
+
+            paths = export_mobile_from_output(
+                settings.output_dir,
+                settings.project_root / "docs" / "analysis",
+                target_date=args.crm_date,
+            )
+            print("Mobile digest exported:")
+            for k, v in paths.items():
+                print(f"  {k}: {v}")
         elif args.export_crm_excel:
             from crm_excel_export import export_excel_from_existing_json
 
@@ -179,6 +210,42 @@ def main() -> int:
                 )
                 export_crm_excel(updated, settings.output_dir / "crm_excel")
                 print(f"Recalc RT: {p.name}")
+        elif args.crm_compare_operators:
+            from crm_operator_compare import run_operator_compare
+
+            missing = [
+                name
+                for name, val in [
+                    ("--op-a-from", args.op_a_from),
+                    ("--op-a-to", args.op_a_to),
+                    ("--op-b-from", args.op_b_from),
+                    ("--op-b-to", args.op_b_to),
+                ]
+                if not val
+            ]
+            if missing:
+                print(f"Error: required flags: {', '.join(missing)}", file=sys.stderr)
+                return 1
+            try:
+                a_from = date.fromisoformat(args.op_a_from)
+                a_to = date.fromisoformat(args.op_a_to)
+                b_from = date.fromisoformat(args.op_b_from)
+                b_to = date.fromisoformat(args.op_b_to)
+            except ValueError:
+                print("Error: operator dates must be YYYY-MM-DD", file=sys.stderr)
+                return 1
+            paths = run_operator_compare(
+                settings,
+                a_name=args.op_a_name,
+                a_from=a_from,
+                a_to=a_to,
+                b_name=args.op_b_name,
+                b_from=b_from,
+                b_to=b_to,
+            )
+            print("Operator compare exported:")
+            for k, v in paths.items():
+                print(f"  {k}: {v}")
         elif args.crm_main_run or args.crm_from or args.crm_to:
             from crm_batch import previous_calendar_week, run_crm_main_run, run_crm_period
 
@@ -221,7 +288,7 @@ def main() -> int:
             else:
                 target = (datetime.now().astimezone() - timedelta(days=1)).date()
 
-            report = run_crm_analysis(settings, target_date=target)
+            report = run_crm_analysis(settings, target_date=target, force=args.crm_force)
             agg = report.aggregate
             print(f"CRM analysis for {target.isoformat()}")
             print(f"Dialogs:  {report.meta.dialogs_count}")
@@ -232,10 +299,12 @@ def main() -> int:
                     print(f"  {k}: {v}")
             rt = agg.response_time
             if rt.avg_seconds is not None:
+                min_name = (rt.min_dialog or "").encode("ascii", "replace").decode("ascii")
+                max_name = (rt.max_dialog or "").encode("ascii", "replace").decode("ascii")
                 print(
                     f"Response time: avg {rt.avg_seconds:.0f}s, "
-                    f"min {rt.min_seconds:.0f}s ({rt.min_dialog}), "
-                    f"max {rt.max_seconds:.0f}s ({rt.max_dialog})"
+                    f"min {rt.min_seconds:.0f}s ({min_name}), "
+                    f"max {rt.max_seconds:.0f}s ({max_name})"
                 )
             out_json = settings.output_dir / f"crm_report_{target.isoformat()}.json"
             out_md = settings.project_root / "docs" / "analysis" / f"CRM_REPORT_{target.isoformat()}.md"
@@ -243,6 +312,9 @@ def main() -> int:
             print(f"MD:   {out_md}")
             excel_daily = settings.output_dir / "crm_excel" / f"CRM_DAILY_{target.isoformat()}.xlsx"
             excel_master = settings.output_dir / "crm_excel" / "CRM_SUMMARY.xlsx"
+            mobile_html = (
+                settings.project_root / "docs" / "analysis" / f"CRM_MOBILE_{target.isoformat()}.html"
+            )
             if excel_daily.exists():
                 print(f"Excel (день):  {excel_daily}")
             if excel_master.exists():
@@ -260,6 +332,9 @@ def main() -> int:
                     "запустите: py -3.12 main.py --export-crm-excel",
                     file=sys.stderr,
                 )
+            if mobile_html.exists():
+                print(f"Mobile HTML:   {mobile_html}")
+                print(f"Mobile MD:     {mobile_html.with_suffix('.md')}")
         elif args.parse_only:
             path = run_parse_only(settings)
             print(f"Parsed dialogs saved to: {path}")

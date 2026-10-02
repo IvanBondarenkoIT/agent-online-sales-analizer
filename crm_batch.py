@@ -76,7 +76,7 @@ def _collect_period_pairs(
         if not jsonl:
             continue
         for ch in load_channels_from_jsonl(jsonl).values():
-            pairs, _ = compute_channel_response_times(ch, schedule)
+            pairs, _ = compute_channel_response_times(ch, schedule, on_date=d)
             all_pairs.extend(pairs)
     return all_pairs
 
@@ -200,6 +200,9 @@ def write_period_report_md(
         "",
         "## Скорость ответа за период",
         "",
+        "_Пары только за день клиента (без дубля длинных пауз). "
+        "Раб. ≤2 мин / вне ≤15 мин — без изменений._",
+        "",
         "### Рабочее время (10–18, пн–пт, SLA ≤2 мин)",
         f"- Медиана (рабочие сек): **{_sec(rt.median_work_seconds)}**",
         f"- Нарушений SLA >2 мин: **{rt.over_sla_work}**",
@@ -214,10 +217,16 @@ def write_period_report_md(
         f"- Пауз >15 мин: {rt.over_15min}",
         f"- Пауз >1 ч: {rt.over_1hour}",
         "",
+        "## Телефон → WhatsApp (сумма по дням)",
+        "",
+        f"- Попыток: **{agg.phone_attempts_total}**",
+        f"- Успехов: **{agg.phone_successes_total}**",
+        f"- Конверсия: **{agg.phone_success_rate}%**",
+        "",
         "## Динамика по дням",
         "",
-        "| Дата | Диалогов | Needs | CTA | Мед. раб. | SLA>2м |",
-        "|------|----------|-------|-----|-----------|--------|",
+        "| Дата | Диалогов | Needs | CTA | Мед. раб. | SLA>2м | Тел. попытки | Тел. успех |",
+        "|------|----------|-------|-----|-----------|--------|--------------|------------|",
     ]
     for dr in daily_reports:
         a = dr.aggregate
@@ -225,7 +234,8 @@ def write_period_report_md(
         lines.append(
             f"| {dr.meta.target_date} | {dr.meta.dialogs_count} | "
             f"{a.avg_scores.get('needs_id', '—')} | {a.avg_scores.get('cta', '—')} | "
-            f"{_sec(r.median_work_seconds)} | {r.over_sla_work} |"
+            f"{_sec(r.median_work_seconds)} | {r.over_sla_work} | "
+            f"{a.phone_attempts_total} | {a.phone_successes_total} |"
         )
 
     lines += ["", "## Топ ошибки недели", ""]
@@ -287,7 +297,7 @@ def run_crm_period(
             continue
         try:
             logger.info("[%s/%s] Analyzing %s", i, total, d)
-            run_crm_analysis(settings, target_date=d)
+            run_crm_analysis(settings, target_date=d, force=force)
             result.days_analyzed.append(d.isoformat())
         except Exception as exc:
             logger.error("Failed %s: %s", d, exc)

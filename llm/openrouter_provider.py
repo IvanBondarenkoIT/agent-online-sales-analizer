@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 import httpx
 
@@ -20,6 +21,18 @@ class OpenRouterProvider(LLMClient):
         self._settings = settings
         self._api_key = settings.openrouter_api_key
         self._model = settings.llm_model
+        self._client: httpx.Client | None = None
+        self.last_total_ms: float | None = None
+
+    def _get_client(self) -> httpx.Client:
+        if self._client is None or self._client.is_closed:
+            self._client = create_http_client(timeout=120.0)
+        return self._client
+
+    def close(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            self._client.close()
+        self._client = None
 
     def complete(self, system: str, user: str) -> str:
         logger.debug("OpenRouter request, model=%s", self._model)
@@ -34,10 +47,14 @@ class OpenRouterProvider(LLMClient):
                 {"role": "user", "content": user},
             ],
         }
-        with create_http_client(timeout=120.0) as client:
-            response = client.post(OPENROUTER_URL, headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
+        t0 = time.monotonic()
+        client = self._get_client()
+        response = client.post(OPENROUTER_URL, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        total_ms = (time.monotonic() - t0) * 1000.0
+        self.last_total_ms = total_ms
+        logger.info("OpenRouter timing: total=%.0fms", total_ms)
 
         choices = data.get("choices", [])
         if not choices:

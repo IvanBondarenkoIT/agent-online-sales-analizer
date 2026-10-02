@@ -22,6 +22,14 @@ class ChecklistItem(BaseModel):
     note: str = ""
 
 
+class PhoneCaptureStats(BaseModel):
+    """Messenger → WhatsApp: ask for phone / number obtained (analysis-day scope)."""
+
+    attempts: int = Field(default=0, ge=0)
+    success: bool = False
+    note: str = ""
+
+
 class ResponseTimeStats(BaseModel):
     # Overall (wall-clock)
     avg_seconds: float | None = None
@@ -78,6 +86,7 @@ class CrmDialogAnalysis(BaseModel):
     checklist: list[ChecklistItem]
     ideal_response_georgian: str
     response_speed_notes: str = ""
+    phone_capture: PhoneCaptureStats = Field(default_factory=PhoneCaptureStats)
 
     @field_validator("errors_found", "strengths_found")
     @classmethod
@@ -134,6 +143,9 @@ class CrmAggregateStats(BaseModel):
     top_errors: list[dict[str, Any]]
     top_strengths: list[dict[str, Any]]
     response_time: ResponseTimeStats
+    phone_attempts_total: int = 0
+    phone_successes_total: int = 0
+    phone_success_rate: float = 0.0
 
 
 class CrmAnalysisReport(BaseModel):

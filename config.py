@@ -33,10 +33,12 @@ class Settings:
     crm_work_days: str
     crm_sla_work_seconds: int
     crm_sla_off_seconds: int
+    crm_llm_concurrency: int
 
     @classmethod
     def from_env(cls) -> Settings:
         provider = os.getenv("LLM_PROVIDER", "cursor").strip().lower()
+        concurrency = max(1, int(os.getenv("CRM_LLM_CONCURRENCY", "1")))
         return cls(
             llm_provider=provider,
             cursor_api_key=os.getenv("CURSOR_API_KEY", "").strip(),
@@ -54,6 +56,7 @@ class Settings:
             crm_work_days=os.getenv("CRM_WORK_DAYS", "0,1,2,3,4").strip(),
             crm_sla_work_seconds=int(os.getenv("CRM_SLA_WORK_SEC", "120")),
             crm_sla_off_seconds=int(os.getenv("CRM_SLA_OFF_SEC", "900")),
+            crm_llm_concurrency=concurrency,
         )
 
     def validate_for_analysis(self) -> None:

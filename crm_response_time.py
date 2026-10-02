@@ -125,6 +125,11 @@ def classify_client_bucket(client_ts: datetime, schedule: WorkSchedule) -> Respo
     return "working" if is_work_moment(client_ts, schedule) else "off_hours"
 
 
+def is_on_calendar_day(dt: datetime, day: date, schedule: WorkSchedule) -> bool:
+    """True if dt falls on calendar ``day`` in the schedule timezone."""
+    return _to_local(dt, schedule).date() == day
+
+
 @dataclass
 class ResponsePairMetrics:
     wall_seconds: float

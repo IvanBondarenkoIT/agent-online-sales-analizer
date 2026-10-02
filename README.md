@@ -56,20 +56,27 @@ py -3.12 main.py --crm-date 2026-07-20
 
 Результат: `output/crm_report_YYYY-MM-DD.json`, `docs/analysis/CRM_REPORT_YYYY-MM-DD.md`, Excel (см. ниже)
 
+При обрыве сети прогресс сохраняется в `output/crm_partial_YYYY-MM-DD.json` — повторный `--crm-date` дожимает оставшиеся диалоги из кэша `output/crm_raw/`. Если `crm_report_*.json` уже есть, `--crm-date` **не** гоняет LLM повторно (как период); полный пересчёт: `--crm-force`.
+
+**Скорость:** Cursor Agents API тратит ~1 мин на диалог (create agent). Поставьте `CRM_LLM_CONCURRENCY=4` в `.env`, чтобы анализировать несколько диалогов параллельно. `REQUEST_DELAY_SEC` — пауза перед каждым вызовом.
+
 ### Excel-сводки CRM
 
 При каждом `--analyze-crm-yesterday` / `--crm-date` автоматически создаются:
 
 - `output/crm_excel/CRM_DAILY_YYYY-MM-DD.xlsx` — дневной отчёт
-- `output/crm_excel/CRM_SUMMARY.xlsx` — накопительный файл с графиками
+- `output/crm_excel/CRM_SUMMARY.xlsx` — накопительный файл: «Графики» (обзор), «Аналитика» (тренды коучинга, SLA%, MA7), «Как читать» (гайд для новичков + автоснимок периода)
+- `docs/analysis/CRM_MOBILE_YYYY-MM-DD.html` (+ `.md`, `CRM_MOBILE_LATEST.*`) — дайджест для телефона: KPI, sparkline, Chart.js
 
-Пересобрать Excel из уже сохранённого JSON (без LLM):
+Пересобрать Excel / mobile из уже сохранённого JSON (без LLM):
 
 ```bash
 py -3.12 main.py --export-crm-excel --crm-date 2026-07-20
 py -3.12 main.py --export-crm-excel
+py -3.12 main.py --export-crm-mobile --crm-date 2026-08-04
 ```
 
+На телефоне откройте `CRM_MOBILE_LATEST.html` в браузере (графики) или киньте `.md` в Telegram.
 ### Основной прогон за неделю (период)
 
 ```bash
@@ -80,7 +87,15 @@ py -3.12 main.py --recalc-crm-rt --crm-date 2026-07-20
 
 Результат периода: `output/crm_report_period_*.json`, `CRM_PERIOD_*.xlsx`, `docs/analysis/CRM_REPORT_PERIOD_*.md`
 
-**SLA скорости:** рабочее время 10–18 (Тbilisi) — ≤2 мин; вне смены — ≤15 мин.
+**SLA скорости:** рабочее время 10–18 (Тbilisi) — ≤2 мин; вне смены — ≤15 мин. В дневных метриках учитываются только ответы на сообщения клиентов **за день анализа** (без дубля длинных пауз из истории).
+
+**Телефон → WhatsApp:** в отчётах — попытки запросить номер и успехи за день (`phone_capture` в JSON).
+
+Сравнить двух операторов по окнам дат (без LLM, из готовых дневных JSON):
+
+```bash
+py -3.12 main.py --crm-compare-operators --op-a-name "Основной" --op-a-from 2026-09-05 --op-a-to 2026-09-18 --op-b-name "Замена" --op-b-from 2026-09-19 --op-b-to 2026-09-20
+```
 
 ### Полный LLM-анализ (тратит лимиты!)
 

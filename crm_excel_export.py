@@ -12,6 +12,14 @@ from typing import Any
 
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, LineChart, Reference
+from openpyxl.chart.data_source import StrRef
+from openpyxl.chart.text import RichText
+from openpyxl.drawing.text import (
+    CharacterProperties,
+    Paragraph,
+    ParagraphProperties,
+    RichTextProperties,
+)
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
@@ -186,6 +194,13 @@ def write_daily_excel(report: CrmAnalysisReport, path: Path) -> Path:
         ("Макс", f"{_format_duration(rt.max_seconds)} ({rt.max_dialog or '—'})"),
         ("Пауз >15 мин", rt.over_15min),
         ("Пауз >1 ч", rt.over_1hour),
+        ("", ""),
+        ("--- Телефон → WhatsApp ---", ""),
+        ("Попыток запросить номер", agg.phone_attempts_total),
+        ("Успехов (номер получен)", agg.phone_successes_total),
+        ("Конверсия попыток %", agg.phone_success_rate),
+        ("", ""),
+        ("RT scope", "Только client msg в день анализа; раб.≤2м / вне≤15м"),
     ]
     for i, (a, b) in enumerate(rows, start=3):
         ws.cell(row=i, column=1, value=a)
@@ -356,6 +371,98 @@ def load_daily_reports_in_range(
     return [r for r in reports if date_from <= r.meta.target_date <= date_to]
 
 
+CHECKLIST_CRITICAL_KEYS = (
+    "needs_identified",
+    "price_in_context",
+    "concrete_cta",
+    "next_step_fixed",
+)
+CHECKLIST_SUPPORT_KEYS = (
+    "values_highlighted",
+    "objections_handled",
+    "greeting_contact",
+    "response_pace_ok",
+    "no_price_chaos",
+    "context_segmentation",
+)
+
+# Guide rows for sheet «Как читать»: #, title, why, what_to_watch, coaching_link, trap
+ANALYTICS_CHART_GUIDE: tuple[tuple[str, str, str, str, str, str], ...] = (
+    (
+        "1",
+        "Needs + CTA + Deal",
+        "Воронка качества диалога: понял ли потребность → дал ли конкретный шаг → закрыл ли сделку.",
+        "Линии балл 0–5 по дням. Рост Needs до цены и CTA после тренинга — главный сигнал.",
+        "После обучения «вопрос до цены» и жёсткого CTA смотрите Needs и CTA; Deal — отложенный эффект.",
+        "Один «хороший» день при 5 диалогах ≠ тренд. Смотрите MA7 рядом.",
+    ),
+    (
+        "2",
+        "Возражения + Ценности",
+        "Эффект обучения по отработке возражений и подсветке ценностей (value-selling).",
+        "Две линии scores: objections_handled и value_presented.",
+        "Тренинг по возражениям → линия возражений; тренинг ценностей → value_presented + чеклист values %. ",
+        "Не смешивайте с Needs/CTA на одном графике — разные навыки.",
+    ),
+    (
+        "3",
+        "MA7: Needs + CTA + Deal",
+        "Сглаживание шума: среднее за до 7 дней по тем же scores.",
+        "Если день скачет вверх/вниз, а MA7 растёт 5–7 дней — попытки обучения работают.",
+        "Используйте на планёрке как «честный» тренд после недели практики.",
+        "MA7 запаздывает: резкий провал вчера ещё не виден полностью.",
+    ),
+    (
+        "4",
+        "MA7: Возражения + Ценности",
+        "То же сглаживание для двух направлений коучинга.",
+        "Сравнивайте MA7 до и после недели обучения по теме.",
+        "После фокуса на возражениях/ценностях — этот график, не общий overview.",
+        "При короткой серии (<7 дней) MA7 = среднее по всем имеющимся дням.",
+    ),
+    (
+        "5",
+        "Чеклист критичный %",
+        "Процесс сделки: потребность → цена в контексте → конкретный CTA → следующий шаг.",
+        "Четыре % прохождения чеклиста по дням (не балл LLM).",
+        "Провал на price_in_context при высоком Needs = «цена-молчание». Провал CTA/next_step = слабое закрытие.",
+        "% ≠ балл score: чеклист бинарный по диалогам, score — средняя оценка.",
+    ),
+    (
+        "6",
+        "Чеклист поддержка %",
+        "Опоры качества: приветствие, ценности, возражения, темп, нет ценового хаоса, сегментация.",
+        "Шесть % по дням — «гигиена» диалога.",
+        "После обучения по ценностям смотрите values_highlighted % вместе со score value_presented.",
+        "Не все 6 должны расти сразу — берите 1–2 фокуса на спринт.",
+    ),
+    (
+        "7",
+        "SLA % + медиана раб. мин",
+        "Скорость ответа: доля соблюдения SLA и типичное время в рабочие часы.",
+        "SLA раб.% / вне % — ↑ лучше; медиана раб. мин — ↓ лучше. Идеал: %↑ и медиана↓ вместе.",
+        "После настройки уведомлений CRM / смены смены — этот блок.",
+        "Рост SLA% при росте медианы = меньше грубых нарушений, но всё ещё медленно.",
+    ),
+    (
+        "8",
+        "Воронка качества %",
+        "Здоровье этапов: needs → price → CTA → next step → Deal% (deal×20).",
+        "Линии на одной шкале 0–100. Узкое место — этап, который заметно ниже предыдущего.",
+        "Планёрка: «где рвётся воронка» → тема обучения на неделю.",
+        "Deal% — proxy, не деньги CRM; не путать с выручкой.",
+    ),
+    (
+        "9",
+        "Диалогов / день",
+        "Контекст объёма: сколько диалогов попало в анализ.",
+        "Пики и провалы рядом с графиками качества.",
+        "Не сравнивайте качество дня с 5 диалогами и дня с 40 без оглядки на объём.",
+        "Малый объём → шумные scores; опирайтесь на MA7.",
+    ),
+)
+
+
 def _trend_arrow(current: float, previous: float | None, higher_is_better: bool = True) -> str:
     if previous is None:
         return "—"
@@ -367,12 +474,266 @@ def _trend_arrow(current: float, previous: float | None, higher_is_better: bool 
     return "↓" if diff > 0 else "↑"
 
 
+def _sla_compliance_pct(over: int, total: int) -> float:
+    if total <= 0:
+        return 0.0
+    return round(max(0.0, min(100.0, 100.0 * (1.0 - over / total))), 1)
+
+
+def _moving_average(values: list[float], idx: int, window: int = 7) -> float:
+    start = max(0, idx - window + 1)
+    chunk = values[start : idx + 1]
+    if not chunk:
+        return 0.0
+    return round(sum(chunk) / len(chunk), 2)
+
+
+def _add_line_chart(
+    ws_charts,
+    ws_data,
+    *,
+    title: str,
+    y_title: str,
+    col_indexes: list[int],
+    n_rows: int,
+    anchor: str,
+    style: int = 10,
+    width: float = 18,
+    height: float = 9,
+) -> None:
+    """col_indexes are 1-based columns on ws_data (row 1 = headers).
+
+    One series per column; dates (col A) are categories on the X axis — never
+    legend entries. Avoid Excel style 16+ which often enables «vary colors by
+    point» and puts every date into the legend.
+    """
+    if n_rows < 1 or not col_indexes:
+        return
+    # Styles 10–12 keep a single color per series; 16+ confuses line charts.
+    safe_style = style if style <= 12 else 10
+    chart = LineChart()
+    chart.title = title
+    chart.y_axis.title = y_title
+    chart.x_axis.title = "День"
+    chart.style = safe_style
+    chart.width = width
+    chart.height = height
+    chart.varyColors = False
+    chart.grouping = "standard"
+
+    cats = Reference(ws_data, min_col=1, min_row=2, max_row=n_rows + 1)
+    # Prefer one contiguous block when columns are adjacent (correct series/cats).
+    ordered = sorted(set(col_indexes))
+    contiguous = ordered == list(range(ordered[0], ordered[-1] + 1))
+    if contiguous and len(ordered) == len(col_indexes):
+        data = Reference(
+            ws_data,
+            min_col=ordered[0],
+            min_row=1,
+            max_col=ordered[-1],
+            max_row=n_rows + 1,
+        )
+        chart.add_data(data, titles_from_data=True, from_rows=False)
+    else:
+        for col in col_indexes:
+            data = Reference(
+                ws_data,
+                min_col=col,
+                min_row=1,
+                max_col=col,
+                max_row=n_rows + 1,
+            )
+            chart.add_data(data, titles_from_data=True, from_rows=False)
+    chart.set_categories(cats)
+
+    # Force string categories so Excel does not reinterpret text dates via numRef.
+    for ser in chart.series:
+        if ser.cat is not None and ser.cat.numRef is not None:
+            formula = ser.cat.numRef.f
+            ser.cat.numRef = None
+            ser.cat.strRef = StrRef(f=formula)
+
+    chart.x_axis.tickLblPos = "nextTo"
+    chart.x_axis.delete = False
+    # Rotate category labels (~−45°) so all dates remain readable.
+    chart.x_axis.txPr = RichText(
+        bodyPr=RichTextProperties(rot=-2700000, upright=False),
+        p=[Paragraph(pPr=ParagraphProperties(defRPr=CharacterProperties(sz=800)))],
+    )
+    if len(col_indexes) == 1:
+        chart.legend = None
+    ws_charts.add_chart(chart, anchor)
+
+
+def _window_avg_score(reports: list[CrmAnalysisReport], keys: list[str], start: int, end: int) -> float:
+    chunk = reports[start:end]
+    if not chunk or not keys:
+        return 0.0
+    vals: list[float] = []
+    for r in chunk:
+        for k in keys:
+            vals.append(float(r.aggregate.avg_scores.get(k, 0) or 0))
+    return round(sum(vals) / len(vals), 2) if vals else 0.0
+
+
+def _window_avg_sla_work(reports: list[CrmAnalysisReport], start: int, end: int) -> float:
+    chunk = reports[start:end]
+    if not chunk:
+        return 0.0
+    vals = [
+        _sla_compliance_pct(r.aggregate.response_time.over_sla_work, r.aggregate.response_time.responses_count_work)
+        for r in chunk
+    ]
+    return round(sum(vals) / len(vals), 1)
+
+
+def _trend_word(delta: float, *, flat: float = 0.05) -> str:
+    if abs(delta) < flat:
+        return "плоско"
+    return "растёт" if delta > 0 else "падает"
+
+
+def _build_period_snapshot(reports: list[CrmAnalysisReport]) -> list[tuple[str, str]]:
+    """Auto snapshot rows for sheet «Как читать» from loaded daily reports."""
+    if not reports:
+        return [("Период", "нет данных")]
+    n = len(reports)
+    date_from = reports[0].meta.target_date
+    date_to = reports[-1].meta.target_date
+    dialogs = sum(r.meta.dialogs_count for r in reports)
+    focus_keys = ["needs_id", "value_presented", "objections_handled", "cta"]
+    w = min(7, n)
+    first_scores = _window_avg_score(reports, focus_keys, 0, w)
+    last_scores = _window_avg_score(reports, focus_keys, n - w, n)
+    first_sla = _window_avg_sla_work(reports, 0, w)
+    last_sla = _window_avg_sla_work(reports, n - w, n)
+
+    score_series = {
+        k: [float(r.aggregate.avg_scores.get(k, 0) or 0) for r in reports]
+        for k in focus_keys
+    }
+    ma7_first = round(
+        sum(_moving_average(score_series[k], w - 1, 7) for k in focus_keys) / len(focus_keys),
+        2,
+    )
+    ma7_last = round(
+        sum(_moving_average(score_series[k], n - 1, 7) for k in focus_keys) / len(focus_keys),
+        2,
+    )
+    conclusion = (
+        f"Качество (MA7 Needs/Value/Obj/CTA): {_trend_word(ma7_last - ma7_first)} "
+        f"({ma7_first} → {ma7_last}). "
+        f"SLA раб.%: {_trend_word(last_sla - first_sla, flat=1.0)} "
+        f"({first_sla}% → {last_sla}%)."
+    )
+    return [
+        ("Период", f"{date_from} … {date_to} ({n} дн.)"),
+        ("Диалогов всего", str(dialogs)),
+        ("Avg scores первые 7 дн.", str(first_scores)),
+        ("Avg scores последние 7 дн.", str(last_scores)),
+        ("SLA раб.% первые 7 дн.", f"{first_sla}%"),
+        ("SLA раб.% последние 7 дн.", f"{last_sla}%"),
+        ("MA7 качество (старт окна)", str(ma7_first)),
+        ("MA7 качество (конец)", str(ma7_last)),
+        ("Короткий вывод", conclusion),
+    ]
+
+
+def _write_howto_sheet(wb: Workbook, reports: list[CrmAnalysisReport]) -> None:
+    """Sheet «Как читать»: intro + auto snapshot + per-chart guide."""
+    ws = wb.create_sheet("Как читать")
+    ws.cell(row=1, column=1, value="Как читать CRM_SUMMARY — гайд для новичков").font = TITLE_FONT
+
+    intro_lines = [
+        "Этот файл измеряет качество ответов операторов ДимКава в CRM Messenger "
+        "(оценки 0–5, чеклист %, скорость ответа).",
+        "Лист «Графики» — краткий обзор за все дни. Лист «Аналитика» — тренды по направлениям обучения.",
+        "Правило стрелок: ↑ лучше для scores, checklist % и SLA%; ↓ лучше для медианы ответа (минуты).",
+        "MA7 — скользящее среднее за до 7 дней. SLA% = 100×(1 − нарушения/ответы). Deal% = deal_closed×20 (не выручка).",
+        "Снимок ниже пересчитывается при каждом --export-crm-excel из уже сохранённых дневных JSON.",
+        "Скорость (SLA/медианы): только ответы на сообщения клиентов в день анализа; "
+        "рабочее время ≤2 мин (рабочие сек), вне смены ≤15 мин (календарные).",
+        "Телефон→WhatsApp: попытки менеджера за день и успехи (номер/контакт от клиента).",
+    ]
+    row = 3
+    ws.cell(row=row, column=1, value="A. Зачем этот файл").font = SUBTITLE_FONT
+    row += 1
+    for line in intro_lines:
+        cell = ws.cell(row=row, column=1, value=line)
+        cell.alignment = WRAP
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+        ws.row_dimensions[row].height = 30
+        row += 1
+
+    row += 1
+    ws.cell(row=row, column=1, value="B. Снимок по текущему корпусу (авто)").font = SUBTITLE_FONT
+    row += 1
+    ws.cell(row=row, column=1, value="Поле")
+    ws.cell(row=row, column=2, value="Значение")
+    _style_header_row(ws, row, 2)
+    row += 1
+    for label, value in _build_period_snapshot(reports):
+        ws.cell(row=row, column=1, value=label)
+        cell = ws.cell(row=row, column=2, value=value)
+        cell.alignment = WRAP
+        if label == "Короткий вывод":
+            ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=6)
+            ws.row_dimensions[row].height = 40
+        row += 1
+
+    row += 1
+    ws.cell(row=row, column=1, value="C. Карточки графиков листа «Аналитика»").font = SUBTITLE_FONT
+    row += 1
+    headers = ["#", "График", "Зачем", "Что смотреть", "Связь с обучением", "Ловушка"]
+    for c, h in enumerate(headers, 1):
+        ws.cell(row=row, column=c, value=h)
+    _style_header_row(ws, row, len(headers))
+    row += 1
+    for num, title, why, watch, coaching, trap in ANALYTICS_CHART_GUIDE:
+        values = (num, title, why, watch, coaching, trap)
+        for c, val in enumerate(values, 1):
+            cell = ws.cell(row=row, column=c, value=val)
+            cell.alignment = WRAP
+        ws.row_dimensions[row].height = 55
+        row += 1
+
+    row += 1
+    ws.cell(row=row, column=1, value="D. Лист «Графики» (краткий обзор)").font = SUBTITLE_FONT
+    row += 1
+    overview = [
+        "1) Все 5 scores на одном графике — быстрый взгляд «всё ли в порядке», без разбора направлений.",
+        "2) Медиана ответа общее vs рабочее (мин) — скорость; ↓ лучше.",
+        "3) Столбцы чеклиста последнего дня — снимок «вчера», не тренд (тренд — на «Аналитика»).",
+        "Символы ↑ ↓ → — на листе «По дням» сравнивают день с предыдущим.",
+    ]
+    for line in overview:
+        cell = ws.cell(row=row, column=1, value=line)
+        cell.alignment = WRAP
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+        ws.row_dimensions[row].height = 28
+        row += 1
+
+    ws.column_dimensions["A"].width = 8
+    ws.column_dimensions["B"].width = 28
+    ws.column_dimensions["C"].width = 42
+    ws.column_dimensions["D"].width = 42
+    ws.column_dimensions["E"].width = 42
+    ws.column_dimensions["F"].width = 38
+
+
 def write_master_excel(reports: list[CrmAnalysisReport], path: Path) -> Path:
-    """Cumulative workbook: daily table + trend charts."""
+    """Cumulative workbook: daily table + trend charts + coaching analytics."""
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
+    score_keys = list(SCORE_LABELS.keys())
+    checklist_keys = list(CHECKLIST_LABELS.keys())
 
-    # --- По дням (flat table) ---
+    score_series: dict[str, list[float]] = {
+        k: [float(r.aggregate.avg_scores.get(k, 0) or 0) for r in reports]
+        for k in score_keys
+    }
+
+    # --- По дням ---
     ws = wb.active
     ws.title = "По дням"
     headers = [
@@ -380,9 +741,11 @@ def write_master_excel(reports: list[CrmAnalysisReport], path: Path) -> Path:
         *SCORE_LABELS.values(),
         "Медиана общ. (сек)", "Медиана раб. (сек)", "SLA>2м", "SLA>15м вне смены",
         "Пауз >15м", "Пауз >1ч",
-        "CTA чеклист %", "Needs чеклист %",
+        "SLA раб. %", "SLA вне %",
+        "Тел. попытки", "Тел. успех", "Тел. %",
+        *[f"{CHECKLIST_LABELS[k]} %" for k in checklist_keys],
     ]
-    for key in SCORE_LABELS:
+    for key in score_keys:
         headers.append(f"Δ {SCORE_LABELS[key][:12]}")
     ws.append(headers)
     _style_header_row(ws, 1, len(headers))
@@ -396,7 +759,7 @@ def write_master_excel(reports: list[CrmAnalysisReport], path: Path) -> Path:
             report.meta.dialogs_count,
             report.meta.messages_count,
         ]
-        for key in SCORE_LABELS:
+        for key in score_keys:
             row.append(agg.avg_scores.get(key, 0))
         row += [
             rt.median_seconds or 0,
@@ -405,108 +768,232 @@ def write_master_excel(reports: list[CrmAnalysisReport], path: Path) -> Path:
             rt.over_sla_off,
             rt.over_15min,
             rt.over_1hour,
-            agg.checklist_pass_rate.get("concrete_cta", 0),
-            agg.checklist_pass_rate.get("needs_identified", 0),
+            _sla_compliance_pct(rt.over_sla_work, rt.responses_count_work),
+            _sla_compliance_pct(rt.over_sla_off, rt.responses_count_off),
+            agg.phone_attempts_total,
+            agg.phone_successes_total,
+            agg.phone_success_rate,
         ]
-        for key in SCORE_LABELS:
-            cur = agg.avg_scores.get(key, 0)
+        for key in checklist_keys:
+            row.append(agg.checklist_pass_rate.get(key, 0))
+        for key in score_keys:
+            cur = float(agg.avg_scores.get(key, 0) or 0)
             prev = prev_scores.get(key) if prev_scores else None
             row.append(_trend_arrow(cur, prev, higher_is_better=True))
         ws.append(row)
-        prev_scores = dict(agg.avg_scores)
+        prev_scores = {k: float(agg.avg_scores.get(k, 0) or 0) for k in score_keys}
 
     _auto_width(ws)
 
-    # --- Динамика (chart-ready numeric columns) ---
+    # --- Динамика ---
+    # 1 Дата | 2-6 scores | 7-8 med | 9 dialogs | 10-11 SLA% | 12-21 checklist | 22 Deal% | 23-27 MA7
     ws_dyn = wb.create_sheet("Динамика")
-    dyn_headers = ["Дата"] + list(SCORE_LABELS.values()) + [
-        "Медиана общ. (мин)", "Медиана раб. (мин)", "CTA %", "Needs %", "Deal %",
-    ]
+    dyn_headers = (
+        ["Дата"]
+        + list(SCORE_LABELS.values())
+        + [
+            "Медиана общ. (мин)",
+            "Медиана раб. (мин)",
+            "Диалогов",
+            "SLA раб. %",
+            "SLA вне %",
+            "Тел. попытки",
+            "Тел. успех",
+            "Тел. %",
+        ]
+        + [f"{CHECKLIST_LABELS[k]} %" for k in checklist_keys]
+        + ["Deal %"]
+        + [f"MA7 {SCORE_LABELS[k]}" for k in score_keys]
+    )
     ws_dyn.append(dyn_headers)
     _style_header_row(ws_dyn, 1, len(dyn_headers))
-    for report in reports:
+
+    for i, report in enumerate(reports):
         agg = report.aggregate
-        rt = report.aggregate.response_time
+        rt = agg.response_time
         row = [report.meta.target_date]
-        for key in SCORE_LABELS:
+        for key in score_keys:
             row.append(agg.avg_scores.get(key, 0))
         row += [
             round((rt.median_seconds or 0) / 60, 1),
             round((rt.median_work_seconds or 0) / 60, 1),
-            agg.checklist_pass_rate.get("concrete_cta", 0),
-            agg.checklist_pass_rate.get("needs_identified", 0),
-            agg.avg_scores.get("deal_closed", 0) * 20,
+            report.meta.dialogs_count,
+            _sla_compliance_pct(rt.over_sla_work, rt.responses_count_work),
+            _sla_compliance_pct(rt.over_sla_off, rt.responses_count_off),
+            agg.phone_attempts_total,
+            agg.phone_successes_total,
+            agg.phone_success_rate,
         ]
+        for key in checklist_keys:
+            row.append(agg.checklist_pass_rate.get(key, 0))
+        row.append(round(float(agg.avg_scores.get("deal_closed", 0) or 0) * 20, 1))
+        for key in score_keys:
+            row.append(_moving_average(score_series[key], i, 7))
         ws_dyn.append(row)
     _auto_width(ws_dyn)
 
+    n = len(reports)
+    col = {
+        "needs": 2,
+        "objections": 3,
+        "value": 4,
+        "cta": 5,
+        "deal": 6,
+        "med": 7,
+        "med_work": 8,
+        "dialogs": 9,
+        "sla_work": 10,
+        "sla_off": 11,
+        "phone_att": 12,
+        "phone_ok": 13,
+        "phone_pct": 14,
+    }
+    chk_start = 15
+    chk_col = {k: chk_start + i for i, k in enumerate(checklist_keys)}
+    deal_pct_col = chk_start + len(checklist_keys)
+    ma7_start = deal_pct_col + 1
+    ma7_col = {k: ma7_start + i for i, k in enumerate(score_keys)}
+
     # --- Графики ---
     ws_ch = wb.create_sheet("Графики")
-    ws_ch.cell(row=1, column=1, value="Динамика показателей CRM").font = TITLE_FONT
-    n = len(reports)
+    ws_ch.cell(row=1, column=1, value="Краткий обзор (детали → лист «Аналитика»)").font = TITLE_FONT
     if n >= 1:
-        # Line chart: scores
-        chart = LineChart()
-        chart.title = "Средние оценки по дням"
-        chart.y_axis.title = "Балл (0–5)"
-        chart.x_axis.title = "День"
-        chart.style = 10
-        chart.width = 18
-        chart.height = 10
-        cats = Reference(ws_dyn, min_col=1, min_row=2, max_row=n + 1)
-        for col_offset, key in enumerate(SCORE_LABELS.keys(), start=2):
-            data = Reference(ws_dyn, min_col=col_offset, min_row=1, max_row=n + 1)
-            chart.add_data(data, titles_from_data=True)
-        chart.set_categories(cats)
-        ws_ch.add_chart(chart, "A3")
+        _add_line_chart(
+            ws_ch, ws_dyn,
+            title="Средние оценки по дням",
+            y_title="Балл (0–5)",
+            col_indexes=[col["needs"], col["objections"], col["value"], col["cta"], col["deal"]],
+            n_rows=n, anchor="A3", style=10,
+        )
+        _add_line_chart(
+            ws_ch, ws_dyn,
+            title="Медиана ответа: общее vs рабочее (мин) — ↓ лучше",
+            y_title="Минуты",
+            col_indexes=[col["med"], col["med_work"]],
+            n_rows=n, anchor="A22", style=11, height=8,
+        )
+        last = reports[-1]
+        ws_ch.cell(row=40, column=1, value=f"Чеклист — {last.meta.target_date}").font = SUBTITLE_FONT
+        chk_start_row = 41
+        ws_ch.cell(row=chk_start_row, column=1, value="Критерий")
+        ws_ch.cell(row=chk_start_row, column=2, value="%")
+        for i, (crit, label) in enumerate(CHECKLIST_LABELS.items(), 1):
+            ws_ch.cell(row=chk_start_row + i, column=1, value=label)
+            ws_ch.cell(
+                row=chk_start_row + i, column=2,
+                value=last.aggregate.checklist_pass_rate.get(crit, 0),
+            )
+        bar = BarChart()
+        bar.type = "bar"
+        bar.title = "Чеклист последнего дня"
+        bar.y_axis.title = "%"
+        bar.width = 16
+        bar.height = 12
+        data_bar = Reference(
+            ws_ch, min_col=2, min_row=chk_start_row,
+            max_row=chk_start_row + len(CHECKLIST_LABELS),
+        )
+        cats_bar = Reference(
+            ws_ch, min_col=1, min_row=chk_start_row + 1,
+            max_row=chk_start_row + len(CHECKLIST_LABELS),
+        )
+        bar.add_data(data_bar, titles_from_data=True)
+        bar.set_categories(cats_bar)
+        ws_ch.add_chart(bar, "D40")
 
-        # Line chart: median response time (minutes) — lower is better
-        chart2 = LineChart()
-        chart2.title = "Медиана ответа: общее vs рабочее время (мин)"
-        chart2.y_axis.title = "Минуты"
-        chart2.style = 11
-        chart2.width = 18
-        chart2.height = 8
-        med_col = 2 + len(SCORE_LABELS)
-        med_work_col = med_col + 1
-        data2 = Reference(ws_dyn, min_col=med_col, min_row=1, max_row=n + 1)
-        data2w = Reference(ws_dyn, min_col=med_work_col, min_row=1, max_row=n + 1)
-        chart2.add_data(data2, titles_from_data=True)
-        chart2.add_data(data2w, titles_from_data=True)
-        chart2.set_categories(cats)
-        ws_ch.add_chart(chart2, "A22")
+    # --- Аналитика ---
+    ws_an = wb.create_sheet("Аналитика")
+    ws_an.cell(row=1, column=1, value="Аналитика улучшений — тренды по направлениям коучинга").font = TITLE_FONT
+    tip = ws_an.cell(
+        row=2, column=1,
+        value=(
+            "↑ лучше для scores / checklist % / SLA%. "
+            "↓ лучше для медианы ответа. "
+            "MA7 — сглаживание за 7 дней: если день скачет, а MA7 растёт — попытки работают. "
+            "Подробно: лист «Как читать»."
+        ),
+    )
+    tip.alignment = WRAP
+    ws_an.merge_cells("A2:H2")
+    ws_an.row_dimensions[2].height = 36
 
-        if n >= 1:
-            # Bar chart: latest day checklist
-            last = reports[-1]
-            ws_ch.cell(row=40, column=1, value=f"Чеклист — {last.meta.target_date}").font = SUBTITLE_FONT
-            chk_start = 41
-            ws_ch.cell(row=chk_start, column=1, value="Критерий")
-            ws_ch.cell(row=chk_start, column=2, value="%")
-            for i, (crit, label) in enumerate(CHECKLIST_LABELS.items(), 1):
-                ws_ch.cell(row=chk_start + i, column=1, value=label)
-                ws_ch.cell(row=chk_start + i, column=2,
-                            value=last.aggregate.checklist_pass_rate.get(crit, 0))
-            bar = BarChart()
-            bar.type = "bar"
-            bar.title = "Чеклист последнего дня"
-            bar.y_axis.title = "%"
-            bar.width = 16
-            bar.height = 12
-            data_bar = Reference(ws_ch, min_col=2, min_row=chk_start, max_row=chk_start + len(CHECKLIST_LABELS))
-            cats_bar = Reference(ws_ch, min_col=1, min_row=chk_start + 1, max_row=chk_start + len(CHECKLIST_LABELS))
-            bar.add_data(data_bar, titles_from_data=True)
-            bar.set_categories(cats_bar)
-            ws_ch.add_chart(bar, "D40")
+    if n >= 1:
+        for row_i, text in [
+            (3, "1. Качество: Needs + CTA + Deal (↑)"),
+            (20, "2. Направления обучения: Возражения + Ценности (↑)"),
+            (37, "3. Сглаживание MA7: Needs/CTA/Deal (↑)"),
+            (54, "4. Сглаживание MA7: Возражения + Ценности (↑)"),
+            (71, "5. Процесс критичный: needs / price / CTA / next step % (↑)"),
+            (88, "6. Процесс поддержка: ценности, возражения, greeting, pace… (↑)"),
+            (105, "7. Скорость: SLA раб.% / вне % (↑) и медиана раб. мин (↓)"),
+            (122, "8. Воронка качества %: needs → price → CTA → next step → Deal% (↑)"),
+            (139, "9. Объём диалогов/день (контекст шума)"),
+        ]:
+            ws_an.cell(row=row_i, column=1, value=text).font = SUBTITLE_FONT
 
-    # --- Легенда трендов ---
-    ws_leg = wb.create_sheet("Легенда")
-    ws_leg.append(["Символ", "Значение"])
-    ws_leg.append(["↑", "Улучшение vs предыдущий день"])
-    ws_leg.append(["↓", "Ухудшение vs предыдущий день"])
-    ws_leg.append(["→", "Без изменений"])
-    ws_leg.append(["—", "Первый день в серии"])
-    _auto_width(ws_leg)
+        _add_line_chart(
+            ws_an, ws_dyn, title="Needs + CTA + Deal", y_title="Балл (0–5)",
+            col_indexes=[col["needs"], col["cta"], col["deal"]],
+            n_rows=n, anchor="A4", style=10,
+        )
+        _add_line_chart(
+            ws_an, ws_dyn, title="Отработка возражений + Подсветка ценностей",
+            y_title="Балл (0–5)",
+            col_indexes=[col["objections"], col["value"]],
+            n_rows=n, anchor="A21", style=12,
+        )
+        _add_line_chart(
+            ws_an, ws_dyn, title="MA7: Needs + CTA + Deal", y_title="Балл MA7",
+            col_indexes=[ma7_col["needs_id"], ma7_col["cta"], ma7_col["deal_closed"]],
+            n_rows=n, anchor="A38", style=10,
+        )
+        _add_line_chart(
+            ws_an, ws_dyn, title="MA7: Возражения + Ценности", y_title="Балл MA7",
+            col_indexes=[ma7_col["objections_handled"], ma7_col["value_presented"]],
+            n_rows=n, anchor="A55", style=12,
+        )
+        _add_line_chart(
+            ws_an, ws_dyn, title="Чеклист критичный %", y_title="%",
+            col_indexes=[chk_col[k] for k in CHECKLIST_CRITICAL_KEYS],
+            n_rows=n, anchor="A72", style=10,
+        )
+        _add_line_chart(
+            ws_an, ws_dyn, title="Чеклист поддержка %", y_title="%",
+            col_indexes=[chk_col[k] for k in CHECKLIST_SUPPORT_KEYS],
+            n_rows=n, anchor="A89", style=12,
+        )
+        _add_line_chart(
+            ws_an, ws_dyn,
+            title="SLA compliance % (↑) + медиана раб. мин (↓)",
+            y_title="% / мин",
+            col_indexes=[col["sla_work"], col["sla_off"], col["med_work"]],
+            n_rows=n, anchor="A106", style=11,
+        )
+        _add_line_chart(
+            ws_an, ws_dyn, title="Воронка качества %", y_title="%",
+            col_indexes=[
+                chk_col["needs_identified"],
+                chk_col["price_in_context"],
+                chk_col["concrete_cta"],
+                chk_col["next_step_fixed"],
+                deal_pct_col,
+            ],
+            n_rows=n, anchor="A123", style=10,
+        )
+        _add_line_chart(
+            ws_an, ws_dyn, title="Объём: диалогов в день", y_title="Диалогов",
+            col_indexes=[col["dialogs"]],
+            n_rows=n, anchor="A140", style=10, height=9,
+        )
+        _add_line_chart(
+            ws_an, ws_dyn, title="Телефон → WhatsApp: попытки и успехи",
+            y_title="Кол-во",
+            col_indexes=[col["phone_att"], col["phone_ok"]],
+            n_rows=n, anchor="A157", style=11, height=8,
+        )
+
+    # --- Как читать ---
+    _write_howto_sheet(wb, reports)
 
     _save_workbook_atomic(wb, path)
     return path
@@ -658,7 +1145,15 @@ def export_crm_excel(report: CrmAnalysisReport, excel_dir: Path) -> dict[str, st
     all_reports = sorted(by_date.values(), key=lambda r: r.meta.target_date)
     write_master_excel(all_reports, master_path)
 
-    return {"daily": str(daily_path), "master": str(master_path)}
+    from crm_mobile_export import export_crm_mobile
+
+    # excel_dir = <project>/output/crm_excel → docs live at <project>/docs/analysis
+    docs_dir = excel_dir.parent.parent / "docs" / "analysis"
+    mobile_paths = export_crm_mobile(all_reports, docs_dir, focus_date=date_str)
+
+    result = {"daily": str(daily_path), "master": str(master_path)}
+    result.update({f"mobile_{k}": v for k, v in mobile_paths.items()})
+    return result
 
 
 def export_excel_from_existing_json(

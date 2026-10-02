@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import json
 import logging
+import statistics
+import threading
 import time
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import httpx
 from pydantic import ValidationError
 
 from analyzer import extract_json
@@ -22,6 +26,7 @@ from crm_response_time import (
     build_response_time_stats,
     classify_client_bucket,
     enrich_dialog_response_time,
+    is_on_calendar_day,
     working_seconds_between,
 )
 from llm.factory import create_llm_client
@@ -35,6 +40,7 @@ from models.crm_schemas import (
     CrmReportMeta,
     CrmScores,
     DialogResponseTime,
+    PhoneCaptureStats,
     ResponseTimeStats,
 )
 
@@ -141,8 +147,15 @@ def is_client(msg_type: str) -> bool:
 def compute_channel_response_times(
     channel: CrmChannel,
     schedule: WorkSchedule,
+    *,
+    on_date: date | None = None,
 ) -> tuple[list[ResponsePairMetrics], DialogResponseTime]:
-    """Client message -> next manager reply; overall + working-hours metrics."""
+    """Client message -> next manager reply; overall + working-hours metrics.
+
+    If ``on_date`` is set, only pairs whose **client** message falls on that
+    calendar day (schedule TZ) are kept. Work/off bucket and SLA thresholds
+    are unchanged: work uses work_seconds vs sla_work; off uses wall vs sla_off.
+    """
     pairs: list[ResponsePairMetrics] = []
     msgs = [m for m in channel.messages if m.msg_type not in SKIP_TYPES and m.created_at]
 
@@ -151,6 +164,9 @@ def compute_channel_response_times(
             continue
         if not (msg.text or "").strip():
             continue
+        if on_date is not None and msg.created_at is not None:
+            if not is_on_calendar_day(msg.created_at, on_date, schedule):
+                continue
         for nxt in msgs[i + 1 :]:
             if is_manager(nxt.msg_type) and nxt.created_at and msg.created_at:
                 wall = (nxt.created_at - msg.created_at).total_seconds()
@@ -241,12 +257,16 @@ def channel_to_user_prompt(
         f"channel_id: {channel.channel_id}",
         f"Дата анализа (активность): {target_date.isoformat()}",
         f"Сообщений в полной истории: {len(channel.messages)}",
+        "Метки: [ДЕНЬ АНАЛИЗА] = реплика в календарный день анализа (Tbilisi); "
+        "[история] = контекст прошлых дней. phone_capture и качество дня — только по [ДЕНЬ АНАЛИЗА].",
+        "Скорость в отчёте: только ответы на сообщения клиентов за день анализа; "
+        "рабочее время ≤2 мин (рабочие сек), вне смены ≤15 мин (календарные).",
     ]
     if rt.responses_count:
-        lines.append("Метрики скорости ответа оператора:")
+        lines.append("Метрики скорости ответа оператора (день анализа):")
         lines.extend(_format_rt_block(rt, schedule))
     else:
-        lines.append("Метрики скорости: нет пар клиент→оператор с текстом")
+        lines.append("Метрики скорости: нет пар клиент→оператор с текстом за день анализа")
     lines.append("")
     lines.append("Полная история переписки (хронология):")
     for i, msg in enumerate(channel.messages, 1):
@@ -254,9 +274,57 @@ def channel_to_user_prompt(
             continue
         role = "Менеджер" if is_manager(msg.msg_type) else "Клиент"
         when = msg.created_at.isoformat() if msg.created_at else "?"
+        tag = "[история]"
+        if msg.created_at is not None and is_on_calendar_day(msg.created_at, target_date, schedule):
+            tag = "[ДЕНЬ АНАЛИЗА]"
         text = (msg.text or "").replace("\n", " ").strip() or "(пусто/медиа)"
-        lines.append(f"{i}. [{when}] {role} ({msg.msg_type}): {text}")
+        lines.append(f"{i}. {tag} [{when}] {role} ({msg.msg_type}): {text}")
     return "\n".join(lines)
+
+
+def _crm_partial_path(settings: Settings, target_date: date) -> Path:
+    return settings.output_dir / f"crm_partial_{target_date.isoformat()}.json"
+
+
+def _save_crm_partial(
+    settings: Settings,
+    target_date: date,
+    source_jsonl: str,
+    reports: list[CrmDialogReport],
+) -> None:
+    payload = {
+        "target_date": target_date.isoformat(),
+        "source_jsonl": source_jsonl,
+        "dialogs": [r.model_dump(mode="json") for r in reports],
+    }
+    path = _crm_partial_path(settings, target_date)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _load_crm_partial(
+    settings: Settings,
+    target_date: date,
+) -> dict[str, CrmDialogReport]:
+    path = _crm_partial_path(settings, target_date)
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("target_date") != target_date.isoformat():
+        return {}
+    reports: dict[str, CrmDialogReport] = {}
+    for item in data.get("dialogs", []):
+        report = CrmDialogReport.model_validate(item)
+        reports[report.channel_id] = report
+    return reports
+
+
+def _delete_crm_partial(settings: Settings, target_date: date) -> None:
+    path = _crm_partial_path(settings, target_date)
+    if path.exists():
+        path.unlink()
 
 
 def analyze_crm_dialog(
@@ -269,15 +337,41 @@ def analyze_crm_dialog(
     max_retries: int,
 ) -> CrmDialogAnalysis:
     user_prompt = channel_to_user_prompt(channel, rt, target_date, schedule)
+    prompt_chars = len(system_prompt) + len(user_prompt)
+    msg_count = len(channel.messages)
     last_error: Exception | None = None
 
     for attempt in range(1, max_retries + 2):
         try:
+            t0 = time.monotonic()
             raw = llm.complete(system=system_prompt, user=user_prompt)
+            total_ms = (time.monotonic() - t0) * 1000.0
+            create_ms = getattr(llm, "last_create_ms", None)
+            poll_ms = getattr(llm, "last_poll_ms", None)
+            if not isinstance(create_ms, (int, float)):
+                create_ms = None
+            if not isinstance(poll_ms, (int, float)):
+                poll_ms = None
+            logger.info(
+                "CRM dialog %s timing: total=%.0fms create=%s poll=%s "
+                "prompt_chars=%s msg_count=%s",
+                channel.channel_id,
+                total_ms,
+                f"{create_ms:.0f}ms" if create_ms is not None else "n/a",
+                f"{poll_ms:.0f}ms" if poll_ms is not None else "n/a",
+                prompt_chars,
+                msg_count,
+            )
             data = extract_json(raw)
             analysis = CrmDialogAnalysis.model_validate(data)
             return analysis
-        except (json.JSONDecodeError, ValidationError, ValueError, RuntimeError) as exc:
+        except (
+            json.JSONDecodeError,
+            ValidationError,
+            ValueError,
+            RuntimeError,
+            httpx.HTTPError,
+        ) as exc:
             last_error = exc
             logger.warning(
                 "CRM dialog %s attempt %s failed: %s",
@@ -286,11 +380,30 @@ def analyze_crm_dialog(
                 exc,
             )
             if attempt <= max_retries:
-                time.sleep(1)
+                time.sleep(min(2**attempt, 8))
 
     raise RuntimeError(
         f"Failed CRM analysis for {channel.person_name}: {last_error}"
     )
+
+
+def _daily_report_path(settings: Settings, target_date: date) -> Path:
+    return settings.output_dir / f"crm_report_{target_date.isoformat()}.json"
+
+
+def _load_daily_report(settings: Settings, target_date: date) -> CrmAnalysisReport | None:
+    path = _daily_report_path(settings, target_date)
+    if not path.exists():
+        return None
+    from crm_excel_export import load_report_from_json
+
+    return load_report_from_json(path)
+
+
+def _median_or_none(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return float(statistics.median(values))
 
 
 def aggregate_crm_results(
@@ -304,6 +417,9 @@ def aggregate_crm_results(
             top_errors=[],
             top_strengths=[],
             response_time=response_stats,
+            phone_attempts_total=0,
+            phone_successes_total=0,
+            phone_success_rate=0.0,
         )
 
     score_keys = ["needs_id", "objections_handled", "value_presented", "cta", "deal_closed"]
@@ -342,12 +458,24 @@ def aggregate_crm_results(
         for s, c in str_counter.most_common(8)
     ]
 
+    phone_attempts = sum(max(0, r.analysis.phone_capture.attempts) for r in reports)
+    phone_successes = sum(1 for r in reports if r.analysis.phone_capture.success)
+    if phone_attempts > 0:
+        phone_rate = round(phone_successes / phone_attempts * 100, 1)
+    elif phone_successes > 0:
+        phone_rate = 100.0  # номер получен без явной попытки менеджера
+    else:
+        phone_rate = 0.0
+
     return CrmAggregateStats(
         avg_scores=avg_scores,
         checklist_pass_rate=checklist_pass_rate,
         top_errors=top_errors,
         top_strengths=top_strengths,
         response_time=response_stats,
+        phone_attempts_total=phone_attempts,
+        phone_successes_total=phone_successes,
+        phone_success_rate=phone_rate,
     )
 
 
@@ -392,6 +520,9 @@ def write_crm_report_md(
         "",
         "## Скорость ответа оператора",
         "",
+        "_Только пары, где клиент написал **в день анализа** (Tbilisi). "
+        "Рабочее время ≤2 мин (рабочие сек); вне смены ≤15 мин (календарные)._",
+        "",
         "### Рабочее время (10–18, пн–пт, SLA ≤2 мин)",
         "",
     ]
@@ -432,6 +563,12 @@ def write_crm_report_md(
         f"- Пауз >15 мин: {rt.over_15min}",
         f"- Пауз >1 ч: {rt.over_1hour}",
         "",
+        "## Телефон → WhatsApp",
+        "",
+        f"- Попыток запросить номер: **{agg.phone_attempts_total}**",
+        f"- Успехов (номер/контакт получен): **{agg.phone_successes_total}**",
+        f"- Конверсия попыток: **{agg.phone_success_rate}%**",
+        "",
         "## Топ ошибки",
         "",
     ]
@@ -452,6 +589,10 @@ def write_crm_report_md(
             "",
             f"**Оценки:** needs={sc.needs_id}, objections={sc.objections_handled}, "
             f"value={sc.value_presented}, cta={sc.cta}, deal={sc.deal_closed}",
+            "",
+            f"**Телефон/WA:** attempts={d.analysis.phone_capture.attempts}, "
+            f"success={'да' if d.analysis.phone_capture.success else 'нет'}"
+            + (f" — {d.analysis.phone_capture.note}" if d.analysis.phone_capture.note else ""),
             "",
         ]
         if d.analysis.strengths_found:
@@ -536,6 +677,8 @@ def _build_recommendations(report: CrmAnalysisReport, schedule: WorkSchedule | N
 def run_crm_analysis(
     settings: Settings,
     target_date: date | None = None,
+    *,
+    force: bool = False,
 ) -> CrmAnalysisReport:
     settings.ensure_dirs()
     setup_logging(settings.logs_dir)
@@ -546,38 +689,93 @@ def run_crm_analysis(
 
     logger.info("CRM analysis for date %s", target_date)
 
+    if not force:
+        partial_path = _crm_partial_path(settings, target_date)
+        existing = _load_daily_report(settings, target_date)
+        if existing is not None and not partial_path.exists():
+            logger.info(
+                "Skip LLM: report already exists (%s dialogs). "
+                "Use --crm-force to recompute.",
+                existing.meta.dialogs_count,
+            )
+            return existing
+        if existing is not None and partial_path.exists():
+            logger.info(
+                "Report exists but partial checkpoint present — resuming failed dialogs"
+            )
+
     schedule = WorkSchedule.from_settings(settings)
-    raw_dir = settings.output_dir / "crm_raw" / target_date.isoformat()
-    fetch_result = fetch_calendar_day(
-        day=target_date,
-        mode="full_history",
-        output_dir=raw_dir,
-    )
-    jsonl_path = Path(fetch_result["jsonl"])
+    if force:
+        _delete_crm_partial(settings, target_date)
+
+    cached_jsonl = find_jsonl_for_date(settings.output_dir, target_date)
+    if cached_jsonl and not force:
+        jsonl_path = cached_jsonl
+        logger.info("Using cached raw JSONL: %s", jsonl_path)
+    else:
+        raw_dir = settings.output_dir / "crm_raw" / target_date.isoformat()
+        fetch_result = fetch_calendar_day(
+            day=target_date,
+            mode="full_history",
+            output_dir=raw_dir,
+        )
+        jsonl_path = Path(fetch_result["jsonl"])
+
     channels = load_channels_from_jsonl(jsonl_path)
 
     per_channel_rt: dict[str, tuple[list[ResponsePairMetrics], DialogResponseTime]] = {}
     for cid, ch in channels.items():
-        per_channel_rt[cid] = compute_channel_response_times(ch, schedule)
+        per_channel_rt[cid] = compute_channel_response_times(ch, schedule, on_date=target_date)
     response_stats = aggregate_response_times(per_channel_rt, schedule)
 
     system_prompt = load_prompt("crm_analyzer_system.txt")
     llm = create_llm_client(settings)
+    concurrency = max(1, settings.crm_llm_concurrency)
+    logger.info("CRM LLM concurrency=%s", concurrency)
 
-    reports: list[CrmDialogReport] = []
+    done_reports = _load_crm_partial(settings, target_date) if not force else {}
+    if done_reports:
+        logger.info("Resuming: %s dialogs already in partial", len(done_reports))
+
     total_messages = sum(len(ch.messages) for ch in channels.values())
+    sorted_channels = sorted(channels.items(), key=lambda x: x[1].person_name)
+    pending = [
+        (i, cid, ch)
+        for i, (cid, ch) in enumerate(sorted_channels, 1)
+        if cid not in done_reports
+    ]
+    for i, (cid, ch) in enumerate(sorted_channels, 1):
+        if cid in done_reports:
+            logger.info("[%s/%s] Skip %s (partial)", i, len(channels), ch.person_name)
 
-    for i, (cid, ch) in enumerate(sorted(channels.items(), key=lambda x: x[1].person_name), 1):
+    partial_lock = threading.Lock()
+    timing_totals: list[float] = []
+    timing_lock = threading.Lock()
+    failed: list[tuple[str, str]] = []
+
+    def _persist_partial() -> None:
+        _save_crm_partial(
+            settings,
+            target_date,
+            str(jsonl_path),
+            [done_reports[c] for c, _ in sorted_channels if c in done_reports],
+        )
+
+    def _analyze_one(item: tuple[int, str, CrmChannel]) -> tuple[str, CrmDialogReport | None, str | None]:
+        i, cid, ch = item
         _, rt = per_channel_rt[cid]
         logger.info("[%s/%s] Analyzing %s", i, len(channels), ch.person_name)
-        if i > 1 and settings.request_delay_sec > 0:
+        if settings.request_delay_sec > 0:
             time.sleep(settings.request_delay_sec)
-
-        analysis = analyze_crm_dialog(
-            ch, rt, target_date, schedule, llm, system_prompt, settings.max_retries
-        )
-        reports.append(
-            CrmDialogReport(
+        try:
+            t0 = time.monotonic()
+            analysis = analyze_crm_dialog(
+                ch, rt, target_date, schedule, llm, system_prompt, settings.max_retries
+            )
+            elapsed_ms = (time.monotonic() - t0) * 1000.0
+            with timing_lock:
+                timing_totals.append(elapsed_ms)
+            report = CrmDialogReport(
                 channel_id=cid,
                 person_name=ch.person_name,
                 platform=ch.platform,
@@ -585,7 +783,61 @@ def run_crm_analysis(
                 analysis=analysis,
                 response_time=rt,
             )
+            return cid, report, None
+        except Exception as exc:
+            logger.error(
+                "CRM dialog %s (%s) failed after retries: %s — soft-continue",
+                cid,
+                ch.person_name,
+                exc,
+            )
+            return cid, None, str(exc)
+
+    try:
+        if concurrency == 1:
+            for item in pending:
+                cid, report, err = _analyze_one(item)
+                if report is not None:
+                    done_reports[cid] = report
+                    _persist_partial()
+                elif err is not None:
+                    failed.append((cid, err))
+        else:
+            with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                futures = {pool.submit(_analyze_one, item): item for item in pending}
+                for fut in as_completed(futures):
+                    cid, report, err = fut.result()
+                    if report is not None:
+                        with partial_lock:
+                            done_reports[cid] = report
+                            _persist_partial()
+                    elif err is not None:
+                        with partial_lock:
+                            failed.append((cid, err))
+    finally:
+        close = getattr(llm, "close", None)
+        if callable(close):
+            close()
+
+    if timing_totals:
+        med = _median_or_none(timing_totals)
+        mean = statistics.mean(timing_totals)
+        logger.info(
+            "CRM day timing: n=%s mean=%.0fms p50=%.0fms min=%.0fms max=%.0fms",
+            len(timing_totals),
+            mean,
+            med if med is not None else 0.0,
+            min(timing_totals),
+            max(timing_totals),
         )
+    if failed:
+        logger.warning(
+            "CRM day soft-continue: %s dialog(s) failed: %s",
+            len(failed),
+            ", ".join(f"{cid}" for cid, _ in failed),
+        )
+
+    reports = [done_reports[cid] for cid, _ in sorted_channels if cid in done_reports]
 
     meta = CrmReportMeta.create(
         source=str(jsonl_path),
@@ -598,7 +850,7 @@ def run_crm_analysis(
     aggregate = aggregate_crm_results(reports, response_stats)
     report = CrmAnalysisReport(meta=meta, aggregate=aggregate, dialogs=reports)
 
-    out_json = settings.output_dir / f"crm_report_{target_date.isoformat()}.json"
+    out_json = _daily_report_path(settings, target_date)
     out_json.write_text(
         json.dumps(report.to_json_dict(), ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -611,6 +863,14 @@ def run_crm_analysis(
     excel_paths = export_crm_excel(report, settings.output_dir / "crm_excel")
     logger.info("CRM Excel saved: %s, %s", excel_paths["daily"], excel_paths["master"])
 
+    if not failed:
+        _delete_crm_partial(settings, target_date)
+    else:
+        logger.warning(
+            "Keeping partial checkpoint (%s) because %s dialog(s) failed",
+            _crm_partial_path(settings, target_date),
+            len(failed),
+        )
     logger.info("CRM report saved: %s, %s", out_json, out_md)
     return report
 
@@ -639,7 +899,7 @@ def compute_response_stats_for_date(
     channels = load_channels_from_jsonl(jsonl_path)
     per_channel: dict[str, tuple[list[ResponsePairMetrics], DialogResponseTime]] = {}
     for cid, ch in channels.items():
-        per_channel[cid] = compute_channel_response_times(ch, schedule)
+        per_channel[cid] = compute_channel_response_times(ch, schedule, on_date=target_date)
     return aggregate_response_times(per_channel, schedule)
 
 
@@ -658,7 +918,7 @@ def recalc_response_times_in_report(
     channels = load_channels_from_jsonl(jsonl_path)
     per_channel: dict[str, tuple[list[ResponsePairMetrics], DialogResponseTime]] = {}
     for cid, ch in channels.items():
-        per_channel[cid] = compute_channel_response_times(ch, schedule)
+        per_channel[cid] = compute_channel_response_times(ch, schedule, on_date=target)
     response_stats = aggregate_response_times(per_channel, schedule)
     updated_dialogs: list[CrmDialogReport] = []
     for d in report.dialogs:
