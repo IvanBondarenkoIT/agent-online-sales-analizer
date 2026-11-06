@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -140,8 +141,19 @@ def build_mobile_md(reports: list[CrmAnalysisReport], focus_date: str) -> str:
         if prev
         else None
     )
+    try:
+        from crm_operator_schedule import resolve_operator_label
+
+        op_label = resolve_operator_label(
+            date.fromisoformat(focus.meta.target_date),
+            meta_operator=focus.meta.operator,
+        )
+    except Exception:
+        op_label = focus.meta.operator or "не указан"
     lines = [
         f"# CRM mobile — {focus.meta.target_date}",
+        "",
+        f"Оператор: **{op_label}**",
         "",
         f"Диалогов: **{focus.meta.dialogs_count}** · "
         f"SLA раб.: **{sla}%** {_arrow(sla, prev_sla)} · "
@@ -221,6 +233,15 @@ def build_mobile_html(reports: list[CrmAnalysisReport], focus_date: str) -> str:
     ) or "<li>нет данных</li>"
     action_items = "".join(f"<li>{a}</li>" for a in actions)
     data_json = json.dumps(payload, ensure_ascii=False)
+    try:
+        from crm_operator_schedule import resolve_operator_label
+
+        op_label = resolve_operator_label(
+            date.fromisoformat(focus.meta.target_date),
+            meta_operator=focus.meta.operator,
+        )
+    except Exception:
+        op_label = focus.meta.operator or "не указан"
     return f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -263,7 +284,7 @@ def build_mobile_html(reports: list[CrmAnalysisReport], focus_date: str) -> str:
 </head>
 <body>
   <h1>CRM — {focus.meta.target_date}</h1>
-  <p class="meta">Мобильный дайджест · тренд {len(window)} дн. · без Excel</p>
+  <p class="meta">Оператор: {op_label} · тренд {len(window)} дн. · без Excel</p>
   <div class="kpi">
     <span>Диалогов <b>{focus.meta.dialogs_count}</b></span>
     <span>SLA раб. <b>{sla}%</b></span>

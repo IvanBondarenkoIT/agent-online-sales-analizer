@@ -106,6 +106,23 @@ def main() -> int:
     parser.add_argument("--op-b-from", type=str, default=None, help="Начало окна B YYYY-MM-DD")
     parser.add_argument("--op-b-to", type=str, default=None, help="Конец окна B YYYY-MM-DD")
     parser.add_argument(
+        "--by-schedule",
+        action="store_true",
+        help="Сравнить операторов по config/operator_schedule.csv (дни могут быть несмежными)",
+    )
+    parser.add_argument(
+        "--since",
+        type=str,
+        default=None,
+        help="С --by-schedule: брать дни базы (A) начиная с YYYY-MM-DD",
+    )
+    parser.add_argument(
+        "--last-days",
+        type=int,
+        default=None,
+        help="С --by-schedule: последние N дней базы (A) из графика",
+    )
+    parser.add_argument(
         "--input",
         type=str,
         default=None,
@@ -211,38 +228,61 @@ def main() -> int:
                 export_crm_excel(updated, settings.output_dir / "crm_excel")
                 print(f"Recalc RT: {p.name}")
         elif args.crm_compare_operators:
-            from crm_operator_compare import run_operator_compare
-
-            missing = [
-                name
-                for name, val in [
-                    ("--op-a-from", args.op_a_from),
-                    ("--op-a-to", args.op_a_to),
-                    ("--op-b-from", args.op_b_from),
-                    ("--op-b-to", args.op_b_to),
-                ]
-                if not val
-            ]
-            if missing:
-                print(f"Error: required flags: {', '.join(missing)}", file=sys.stderr)
-                return 1
-            try:
-                a_from = date.fromisoformat(args.op_a_from)
-                a_to = date.fromisoformat(args.op_a_to)
-                b_from = date.fromisoformat(args.op_b_from)
-                b_to = date.fromisoformat(args.op_b_to)
-            except ValueError:
-                print("Error: operator dates must be YYYY-MM-DD", file=sys.stderr)
-                return 1
-            paths = run_operator_compare(
-                settings,
-                a_name=args.op_a_name,
-                a_from=a_from,
-                a_to=a_to,
-                b_name=args.op_b_name,
-                b_from=b_from,
-                b_to=b_to,
+            from crm_operator_compare import (
+                run_operator_compare,
+                run_operator_compare_by_schedule,
             )
+
+            if args.by_schedule:
+                since = None
+                if args.since:
+                    try:
+                        since = date.fromisoformat(args.since)
+                    except ValueError:
+                        print("Error: --since must be YYYY-MM-DD", file=sys.stderr)
+                        return 1
+                try:
+                    paths = run_operator_compare_by_schedule(
+                        settings,
+                        a_name=args.op_a_name,
+                        b_name=args.op_b_name,
+                        since=since,
+                        last_days=args.last_days,
+                    )
+                except (FileNotFoundError, ValueError) as exc:
+                    print(f"Error: {exc}", file=sys.stderr)
+                    return 1
+            else:
+                missing = [
+                    name
+                    for name, val in [
+                        ("--op-a-from", args.op_a_from),
+                        ("--op-a-to", args.op_a_to),
+                        ("--op-b-from", args.op_b_from),
+                        ("--op-b-to", args.op_b_to),
+                    ]
+                    if not val
+                ]
+                if missing:
+                    print(f"Error: required flags: {', '.join(missing)}", file=sys.stderr)
+                    return 1
+                try:
+                    a_from = date.fromisoformat(args.op_a_from)
+                    a_to = date.fromisoformat(args.op_a_to)
+                    b_from = date.fromisoformat(args.op_b_from)
+                    b_to = date.fromisoformat(args.op_b_to)
+                except ValueError:
+                    print("Error: operator dates must be YYYY-MM-DD", file=sys.stderr)
+                    return 1
+                paths = run_operator_compare(
+                    settings,
+                    a_name=args.op_a_name,
+                    a_from=a_from,
+                    a_to=a_to,
+                    b_name=args.op_b_name,
+                    b_from=b_from,
+                    b_to=b_to,
+                )
             print("Operator compare exported:")
             for k, v in paths.items():
                 print(f"  {k}: {v}")

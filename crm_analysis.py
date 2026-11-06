@@ -488,10 +488,20 @@ def write_crm_report_md(
     rt = agg.response_time
     if schedule is None:
         schedule = WorkSchedule()
+    try:
+        from crm_operator_schedule import resolve_operator_label
+
+        op_label = resolve_operator_label(
+            date.fromisoformat(report.meta.target_date),
+            meta_operator=report.meta.operator,
+        )
+    except Exception:
+        op_label = report.meta.operator or "не указан"
     lines = [
         f"# Отчёт CRM-переписок — {report.meta.target_date}",
         "",
         f"- Источник: `{report.meta.source}`",
+        f"- Оператор: **{op_label}**",
         f"- Диалогов: **{report.meta.dialogs_count}**",
         f"- Сообщений: **{report.meta.messages_count}**",
         f"- LLM: {report.meta.llm_provider} / {report.meta.model}",
@@ -839,6 +849,14 @@ def run_crm_analysis(
 
     reports = [done_reports[cid] for cid, _ in sorted_channels if cid in done_reports]
 
+    operator_name: str | None = None
+    try:
+        from crm_operator_schedule import operator_for
+
+        operator_name = operator_for(target_date)
+    except Exception as exc:
+        logger.warning("Operator schedule lookup failed: %s", exc)
+
     meta = CrmReportMeta.create(
         source=str(jsonl_path),
         target_date=target_date.isoformat(),
@@ -846,6 +864,7 @@ def run_crm_analysis(
         messages_count=total_messages,
         llm_provider=settings.llm_provider,
         model=settings.llm_model,
+        operator=operator_name,
     )
     aggregate = aggregate_crm_results(reports, response_stats)
     report = CrmAnalysisReport(meta=meta, aggregate=aggregate, dialogs=reports)

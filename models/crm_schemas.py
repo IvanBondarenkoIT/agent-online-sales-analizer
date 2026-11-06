@@ -115,6 +115,7 @@ class CrmReportMeta(BaseModel):
     date_from: str | None = None
     date_to: str | None = None
     days_in_period: int | None = None
+    operator: str | None = None
 
     @classmethod
     def create(
@@ -125,6 +126,7 @@ class CrmReportMeta(BaseModel):
         messages_count: int,
         llm_provider: str,
         model: str,
+        operator: str | None = None,
     ) -> CrmReportMeta:
         return cls(
             source=source,
@@ -134,6 +136,7 @@ class CrmReportMeta(BaseModel):
             llm_provider=llm_provider,
             model=model,
             generated_at=datetime.now(timezone.utc).isoformat(),
+            operator=operator,
         )
 
 

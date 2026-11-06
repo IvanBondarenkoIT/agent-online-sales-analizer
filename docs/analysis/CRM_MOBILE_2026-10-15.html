@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>CRM mobile — 2026-10-15</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f3ee; --ink: #1c1917; --muted: #78716c; --line: #e7e5e4;
+    --card: #fffcf8; --accent: #0f766e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", system-ui, sans-serif;
+    background: linear-gradient(165deg, #efe8df 0%, var(--bg) 40%, #e8eef0 100%);
+    color: var(--ink); padding: 16px 14px 40px; line-height: 1.35;
+  }
+  h1 { font-size: 1.35rem; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .meta { color: var(--muted); font-size: 0.92rem; margin-bottom: 16px; }
+  .kpi { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .kpi span {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 12px; font-size: 0.9rem;
+  }
+  .kpi b { color: var(--accent); }
+  section {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 12px 12px 8px; margin-bottom: 12px;
+  }
+  section h2 { font-size: 0.95rem; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  td { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  canvas { width: 100% !important; max-height: 220px; }
+  ul { margin: 0; padding-left: 1.1rem; }
+  li { margin-bottom: 6px; }
+  .foot { font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+  <h1>CRM — 2026-10-15</h1>
+  <p class="meta">Оператор: не указан · тренд 14 дн. · без Excel</p>
+  <div class="kpi">
+    <span>Диалогов <b>18</b></span>
+    <span>SLA раб. <b>30.3%</b></span>
+    <span>Мед. раб. <b>4.0 мин</b></span>
+    <span>Тел. <b>0→0</b> (0.0%)</span>
+  </div>
+
+  <section>
+    <h2>Оценки сегодня (0–5)</h2>
+    <table><tr><td>Needs</td><td>1.44</td></tr><tr><td>Возражения</td><td>2.5</td></tr><tr><td>Ценности</td><td>1.78</td></tr><tr><td>CTA</td><td>1.11</td></tr><tr><td>Deal</td><td>0.61</td></tr></table>
+  </section>
+
+  <section>
+    <h2>Needs + CTA + Deal</h2>
+    <canvas id="c1"></canvas>
+  </section>
+  <section>
+    <h2>Возражения + Ценности</h2>
+    <canvas id="c2"></canvas>
+  </section>
+  <section>
+    <h2>SLA раб.% и медиана раб. (мин)</h2>
+    <canvas id="c3"></canvas>
+  </section>
+  <section>
+    <h2>Диалогов в день</h2>
+    <canvas id="c4"></canvas>
+  </section>
+
+  <section>
+    <h2>Топ ошибки</h2>
+    <ul><li>(2) не зафиксирован следующий шаг</li><li>(2) не озвучены ценности димкава (обучение, гарантия, шоурум, доставка)</li><li>(1) цена и акция — в первом сообщении, до выявления потребности (нагрузка, бюджет, сроки)</li></ul>
+  </section>
+  <section>
+    <h2>Что делать завтра</h2>
+    <ul><li>До цены — один вопрос (дом/бизнес). Фокус: Needs.</li><li>Каждый ответ → конкретный шаг (время / ссылка / визит). Фокус: CTA.</li><li>После цены — одна ценность продукта (не скидка). Фокус: Ценности.</li><li>SLA раб. 30.3% — цель ≤2 мин в 10–18. Проверить уведомления CRM.</li></ul>
+  </section>
+  <p class="foot">↑ scores / SLA% лучше · ↓ медиана минут лучше · данные из crm_report_*.json</p>
+
+<script>
+const D = {"labels": ["10-02", "10-03", "10-04", "10-05", "10-06", "10-07", "10-08", "10-09", "10-10", "10-11", "10-12", "10-13", "10-14", "10-15"], "needs": [1.1, 1.63, 1.5, 1.64, 1.62, 1.58, 1.86, 1.74, 1.65, 1.53, 1.36, 1.81, 1.8, 1.44], "cta": [0.75, 0.96, 1.5, 0.86, 1.08, 1.0, 1.19, 0.89, 1.48, 0.84, 1.27, 0.75, 1.13, 1.11], "deal": [0.45, 0.63, 1.5, 1.14, 0.62, 0.45, 0.86, 0.58, 1.35, 0.63, 0.64, 0.69, 0.87, 0.61], "objections": [2.2, 3.04, 3.14, 2.14, 2.71, 2.48, 3.05, 2.37, 2.74, 2.74, 2.36, 2.5, 2.87, 2.5], "value": [1.85, 2.93, 2.0, 2.79, 2.46, 2.29, 2.81, 2.32, 2.35, 2.95, 2.64, 2.94, 2.4, 1.78], "dialogs": [20, 27, 14, 14, 24, 31, 21, 19, 23, 19, 11, 16, 15, 18], "sla_work": [29.2, 0.0, 0.0, 44.1, 28.3, 27.5, 52.2, 37.8, 0.0, 0.0, 20.0, 19.2, 48.9, 30.3], "med_work": [9.5, 0.0, 0.0, 4.0, 4.2, 5.0, 1.8, 4.4, 0.0, 0.0, 4.5, 5.5, 2.5, 4.0]};
+const common = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+  scales: {
+    x: { ticks: { maxRotation: 45, minRotation: 45, font: { size: 10 } } },
+    y: { beginAtZero: true, ticks: { font: { size: 10 } } }
+  }
+};
+function line(id, datasets, yMax) {
+  const opts = JSON.parse(JSON.stringify(common));
+  if (yMax) opts.scales.y.suggestedMax = yMax;
+  new Chart(document.getElementById(id), {
+    type: 'line',
+    data: { labels: D.labels, datasets },
+    options: opts
+  });
+}
+line('c1', [
+  { label: 'Needs', data: D.needs, borderColor: '#0f766e', tension: 0.25, pointRadius: 2 },
+  { label: 'CTA', data: D.cta, borderColor: '#b45309', tension: 0.25, pointRadius: 2 },
+  { label: 'Deal', data: D.deal, borderColor: '#57534e', tension: 0.25, pointRadius: 2 }
+], 5);
+line('c2', [
+  { label: 'Возражения', data: D.objections, borderColor: '#9f1239', tension: 0.25, pointRadius: 2 },
+  { label: 'Ценности', data: D.value, borderColor: '#1d4ed8', tension: 0.25, pointRadius: 2 }
+], 5);
+line('c3', [
+  { label: 'SLA раб.%', data: D.sla_work, borderColor: '#0f766e', tension: 0.25, pointRadius: 2 },
+  { label: 'Мед. раб. мин', data: D.med_work, borderColor: '#b45309', tension: 0.25, pointRadius: 2 }
+], null);
+line('c4', [
+  { label: 'Диалоги', data: D.dialogs, borderColor: '#44403c', backgroundColor: 'rgba(68,64,60,0.12)', fill: true, tension: 0.25, pointRadius: 2 }
+], null);
+</script>
+</body>
+</html>

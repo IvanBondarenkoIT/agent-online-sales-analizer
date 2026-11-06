@@ -115,6 +115,8 @@ class OperatorCompareResult:
     pluses: list[str] = field(default_factory=list)
     minuses: list[str] = field(default_factory=list)
     caveats: list[str] = field(default_factory=list)
+    a_dates: list[date] = field(default_factory=list)
+    b_dates: list[date] = field(default_factory=list)
 
 
 def _percent_map(items: list[dict[str, Any]], *, text_key: str) -> dict[str, float]:
@@ -245,13 +247,32 @@ def build_compare_metrics(
     return metrics
 
 
-def _caveats(a_from: date, a_to: date, b_from: date, b_to: date) -> list[str]:
+def _weekend_days_list(days: list[date]) -> tuple[int, int]:
+    if not days:
+        return 0, 0
+    weekends = sum(1 for d in days if d.weekday() >= 5)
+    return weekends, len(days)
+
+
+def _caveats(
+    a_from: date,
+    a_to: date,
+    b_from: date,
+    b_to: date,
+    *,
+    a_dates: list[date] | None = None,
+    b_dates: list[date] | None = None,
+) -> list[str]:
     notes = [
         "Сравниваем качество на диалог, не объём продаж. Диалогов/день — только контекст.",
         f"Пороги: оценка ≥ {SCORE_DELTA_THRESHOLD:.2f}, чеклист/SLA/телефон ≥ {PCT_DELTA_THRESHOLD:.0f} п.п.",
     ]
-    a_we, a_n = _weekend_days(a_from, a_to)
-    b_we, b_n = _weekend_days(b_from, b_to)
+    if a_dates is not None and b_dates is not None:
+        a_we, a_n = _weekend_days_list(a_dates)
+        b_we, b_n = _weekend_days_list(b_dates)
+    else:
+        a_we, a_n = _weekend_days(a_from, a_to)
+        b_we, b_n = _weekend_days(b_from, b_to)
     if b_n > 0 and b_we == b_n and a_n > 0 and a_we < a_n:
         notes.append(
             "Окно замены — выходные, база — смешанные будни и выходные; "
@@ -270,6 +291,8 @@ def compare_operator_windows(
     a_to: date,
     b_from: date,
     b_to: date,
+    a_dates: list[date] | None = None,
+    b_dates: list[date] | None = None,
 ) -> OperatorCompareResult:
     metrics = build_compare_metrics(a_report, b_report)
     pluses, minuses = classify_quality_findings(
@@ -279,6 +302,8 @@ def compare_operator_windows(
         a_name=a_name,
         b_name=b_name,
     )
+    a_list = list(a_dates) if a_dates is not None else []
+    b_list = list(b_dates) if b_dates is not None else []
     return OperatorCompareResult(
         a_name=a_name,
         b_name=b_name,
@@ -291,7 +316,11 @@ def compare_operator_windows(
         metrics=metrics,
         pluses=pluses,
         minuses=minuses,
-        caveats=_caveats(a_from, a_to, b_from, b_to),
+        caveats=_caveats(
+            a_from, a_to, b_from, b_to, a_dates=a_dates, b_dates=b_dates
+        ),
+        a_dates=a_list,
+        b_dates=b_list,
     )
 
 
@@ -308,15 +337,54 @@ def _load_window(settings: Settings, d_from: date, d_to: date) -> CrmAnalysisRep
     return report
 
 
+def _load_days(settings: Settings, dates: list[date]) -> CrmAnalysisReport:
+    if not dates:
+        raise FileNotFoundError("Пустой список дат для окна оператора")
+    from crm_excel_export import load_report_from_json
+
+    daily: list[CrmAnalysisReport] = []
+    missing: list[str] = []
+    for d in sorted(set(dates)):
+        path = settings.output_dir / f"crm_report_{d.isoformat()}.json"
+        if not path.exists():
+            missing.append(d.isoformat())
+            continue
+        daily.append(load_report_from_json(path))
+    if not daily:
+        raise FileNotFoundError(
+            "Нет дневных crm_report_*.json для дат: "
+            + ", ".join(d.isoformat() for d in sorted(set(dates)))
+        )
+    if missing:
+        # Still build from available days; caller may log missing
+        pass
+    d_from = min(date.fromisoformat(r.meta.target_date) for r in daily)
+    d_to = max(date.fromisoformat(r.meta.target_date) for r in daily)
+    report = build_period_report(settings, daily, d_from, d_to)
+    # days_in_period already = len(daily_reports) — correct for non-contiguous windows
+    report.meta.report_type = "operator_window"
+    return report
+
+
 def write_compare_md(result: OperatorCompareResult, path: Path) -> Path:
+    from crm_operator_schedule import format_date_list
+
     a, b = result.a_name, result.b_name
+    a_days_n = result.a_report.meta.days_in_period
+    b_days_n = result.b_report.meta.days_in_period
     lines = [
         f"# Сравнение операторов: {a} vs {b}",
         "",
         f"- **{a}:** {result.a_from.isoformat()} — {result.a_to.isoformat()} "
-        f"({result.a_report.meta.days_in_period} дн., {result.a_report.meta.dialogs_count} диалогов)",
+        f"({a_days_n} дн., {result.a_report.meta.dialogs_count} диалогов)",
         f"- **{b}:** {result.b_from.isoformat()} — {result.b_to.isoformat()} "
-        f"({result.b_report.meta.days_in_period} дн., {result.b_report.meta.dialogs_count} диалогов)",
+        f"({b_days_n} дн., {result.b_report.meta.dialogs_count} диалогов)",
+    ]
+    if result.a_dates:
+        lines.append(f"- Даты {a}: {format_date_list(result.a_dates)}")
+    if result.b_dates:
+        lines.append(f"- Даты {b}: {format_date_list(result.b_dates)}")
+    lines += [
         "",
         "## Оговорки",
         "",
@@ -458,6 +526,22 @@ def compare_stem(a_name: str, a_from: date, a_to: date, b_name: str, b_from: dat
     )
 
 
+def _filter_operator_dates(
+    dates: list[date],
+    *,
+    since: date | None = None,
+    last_days: int | None = None,
+) -> list[date]:
+    out = sorted(dates)
+    if since is not None:
+        out = [d for d in out if d >= since]
+    if last_days is not None:
+        if last_days < 1:
+            raise ValueError("--last-days must be >= 1")
+        out = out[-last_days:]
+    return out
+
+
 def run_operator_compare(
     settings: Settings,
     *,
@@ -472,6 +556,16 @@ def run_operator_compare(
         raise ValueError("date_from must be <= date_to for each operator window")
     a_report = _load_window(settings, a_from, a_to)
     b_report = _load_window(settings, b_from, b_to)
+    a_dates = [
+        date.fromisoformat(str(s["target_date"]))
+        for s in a_report.daily_summaries
+        if s.get("target_date")
+    ]
+    b_dates = [
+        date.fromisoformat(str(s["target_date"]))
+        for s in b_report.daily_summaries
+        if s.get("target_date")
+    ]
     result = compare_operator_windows(
         a_report,
         b_report,
@@ -481,8 +575,64 @@ def run_operator_compare(
         a_to=a_to,
         b_from=b_from,
         b_to=b_to,
+        a_dates=a_dates,
+        b_dates=b_dates,
     )
     stem = compare_stem(a_name, a_from, a_to, b_name, b_from, b_to)
+    md_path = settings.project_root / "docs" / "analysis" / f"{stem}.md"
+    xlsx_path = settings.output_dir / "crm_excel" / f"{stem}.xlsx"
+    write_compare_md(result, md_path)
+    write_compare_excel(result, xlsx_path)
+    return {"md": str(md_path), "excel": str(xlsx_path)}
+
+
+def run_operator_compare_by_schedule(
+    settings: Settings,
+    *,
+    a_name: str,
+    b_name: str,
+    since: date | None = None,
+    last_days: int | None = None,
+    schedule_path: Path | None = None,
+) -> dict[str, str]:
+    from crm_excel_export import load_all_daily_reports
+    from crm_operator_schedule import days_for_operator, load_schedule
+
+    schedule = load_schedule(schedule_path)
+    available = {
+        date.fromisoformat(r.meta.target_date) for r in load_all_daily_reports(settings.output_dir)
+    }
+    a_all = [d for d in days_for_operator(a_name, schedule) if d in available]
+    b_all = [d for d in days_for_operator(b_name, schedule) if d in available]
+    a_dates = _filter_operator_dates(a_all, since=since, last_days=last_days)
+    b_dates = list(b_all)
+    if not a_dates:
+        raise FileNotFoundError(
+            f"Нет дневных отчётов для оператора «{a_name}» по графику"
+            + (f" (since={since})" if since else "")
+            + (f" (last_days={last_days})" if last_days else "")
+        )
+    if not b_dates:
+        raise FileNotFoundError(
+            f"Нет дневных отчётов для оператора «{b_name}» по графику"
+        )
+    a_report = _load_days(settings, a_dates)
+    b_report = _load_days(settings, b_dates)
+    a_from, a_to = min(a_dates), max(a_dates)
+    b_from, b_to = min(b_dates), max(b_dates)
+    result = compare_operator_windows(
+        a_report,
+        b_report,
+        a_name=a_name,
+        b_name=b_name,
+        a_from=a_from,
+        a_to=a_to,
+        b_from=b_from,
+        b_to=b_to,
+        a_dates=a_dates,
+        b_dates=b_dates,
+    )
+    stem = compare_stem(a_name, a_from, a_to, b_name, b_from, b_to) + "_by_schedule"
     md_path = settings.project_root / "docs" / "analysis" / f"{stem}.md"
     xlsx_path = settings.output_dir / "crm_excel" / f"{stem}.xlsx"
     write_compare_md(result, md_path)
